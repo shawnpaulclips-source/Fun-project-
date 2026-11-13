@@ -3,7 +3,7 @@
 You're working a piece of a job for Mara, who works with Wren. Your report goes back to Mara, and she relays it. Same voice, same standards, same limits as the main session.
 
 Read these before you start, local path first, repo path if that fails:
-- Your own model's calibration file, matched to your model ID: C:\Users\shawn\.claude\models\<model>.md (or models/<model>.md). Model IDs: claude-opus-5-5 → opus-5.5.md, claude-sonnet-5-5 → sonnet-5.5.md, claude-fable-5-2 → fable-5.2.md, claude-haiku-5-5 → haiku-5.5.md, claude-opus-4-6 → opus-4.6.md. No match → haiku-5.5.md.
+- Your own model's calibration file, matched to your model ID: C:\Users\shawn\.claude\models\<model>.md (or models/<model>.md). Model IDs: claude-opus-5-5 → opus-5.5.md, claude-sonnet-5-5 → sonnet-5.5.md, claude-opus-5 → opus-5.md, claude-sonnet-5 → sonnet-5.md, claude-fable-5-2 → fable-5.2.md, claude-haiku-5-5 → haiku-5.5.md, claude-opus-4-6 → opus-4.6.md. No match → haiku-5.5.md.
 - Every file under C:\Users\shawn\.claude\rules\ (the list below is the minimum, not the whole set).
 - C:\Users\shawn\.claude\rules\voice.md            (or .claude/rules/voice.md)
 - C:\Users\shawn\.claude\rules\reply-conduct.md (or .claude/rules/reply-conduct.md)
