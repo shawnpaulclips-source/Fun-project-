@@ -3,7 +3,8 @@
 	players + bots (Dummy-template rigs tagged with BotUsername) + training dummies
 
 	F1  box          F2  skeleton       F3  visibility check
-	F4  box style    F5  bots on/off    END unload
+	F4  box style    F5  bots on/off    F6  silent aim
+	[ / ]  shrink / grow fov            END unload
 ]]
 
 if getgenv().__MARA_ESP then pcall(getgenv().__MARA_ESP) end
@@ -44,6 +45,16 @@ local CONFIG = {
 	HealthMid     = Color3.fromRGB(255, 220, 70),
 	HealthLow     = Color3.fromRGB(255, 60, 70),
 	GhostColor    = Color3.fromRGB(255, 255, 255),
+
+	SilentAim     = true,
+	AimWallCheck  = true,     -- server rejects shots a wall eats first, so skip occluded heads
+	AimAtDummies  = false,
+	FOVRadius     = 140,
+	FOVMin        = 40,
+	FOVMax        = 500,
+	FOVColor      = Color3.fromRGB(235, 235, 245),
+	FOVLockColor  = Color3.fromRGB(255, 70, 95),
+	AimLineColor  = Color3.fromRGB(255, 70, 95),
 }
 
 local HITBOX_NAMES = { HeadHitbox = true, BodyHitbox = true, LegsHitbox = true }
@@ -507,6 +518,283 @@ local function renderEntity(e, dt, now)
 	for i = used + 1, 14 do v.bones[i].Visible = false; v.boneOutlines[i].Visible = false end
 end
 
+------------------------------------------------------------------------ silent aim
+--[[
+	WeaponController.request_fire reads workspace.CurrentCamera.CFrame exactly once and
+	uses that Position/LookVector for the client hit cast, the tracer, AND the zap.shoot
+	packet the server validates. Spoofing that single read for the duration of the call
+	makes every stage agree on the head — no desync between what you see and what lands.
+]]
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local function tagFrom(name)
+	local ok, v = pcall(function()
+		return require(ReplicatedStorage.shared.combat[name])
+	end)
+	return ok and type(v) == "string" and v or nil
+end
+local BARRIER_TAG, GLASS_TAG = tagFrom("barrier_tag"), tagFrom("glass_tag")
+
+local function findWeaponController()
+	local ok, mod = pcall(function()
+		return require(ReplicatedStorage.client.controllers.WeaponController)
+	end)
+	if ok and type(mod) == "table" and rawget(mod, "request_fire") then return mod end
+	if getgc then
+		for _, t in ipairs(getgc(true)) do
+			if type(t) == "table" and rawget(t, "request_fire") and rawget(t, "compute_player_radius") then
+				return t
+			end
+		end
+	end
+	return nil
+end
+
+local Aim = {
+	target = nil,        -- { e = entity, part = BasePart }
+	lockT = 0,           -- 0..1 line extension when a new target locks
+	lineEnd = nil,
+	lockLevel = 0,       -- smoothed 0..1, drives ring colour/spin
+	spin = 0,
+	shotT = 0,           -- 1 on fire, decays
+	shotPos = nil,
+	ripples = {},
+}
+
+local spoofCF, spoofCam = nil, nil
+
+local function aimPart(model)
+	local p = model:FindFirstChild("HeadHitbox") or model:FindFirstChild("Head")
+	return (p and p:IsA("BasePart")) and p or nil
+end
+
+local aimRay = RaycastParams.new()
+aimRay.FilterType = Enum.RaycastFilterType.Exclude
+aimRay.IgnoreWater = true
+
+-- mirror the game's own world-cast exclusions so "visible" means "the shot connects"
+local function aimVisible(model, point)
+	local ex = { model, Camera }
+	if LocalPlayer.Character then table.insert(ex, LocalPlayer.Character) end
+	for _, n in ipairs({ "Effects", "Corpses", "GlassDebris", "ExplosiveDebris" }) do
+		local f = Workspace:FindFirstChild(n)
+		if f then table.insert(ex, f) end
+	end
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p.Character then table.insert(ex, p.Character) end
+	end
+	if BARRIER_TAG then for _, x in ipairs(CollectionService:GetTagged(BARRIER_TAG)) do table.insert(ex, x) end end
+	if GLASS_TAG then for _, x in ipairs(CollectionService:GetTagged(GLASS_TAG)) do table.insert(ex, x) end end
+	aimRay.FilterDescendantsInstances = ex
+	local o = Camera.CFrame.Position
+	return Workspace:Raycast(o, point - o, aimRay) == nil
+end
+
+local function pickTarget(center)
+	local best, bestPart, bestD = nil, nil, CONFIG.FOVRadius
+	for model, e in pairs(Entities) do
+		if not e.dying and e.hum.Health > 0 and model.Parent
+			and (e.kind ~= "Dummy" or CONFIG.AimAtDummies) and not sameTeam(e) then
+			local part = aimPart(model)
+			if part then
+				local s = Camera:WorldToViewportPoint(part.Position)
+				if s.Z > 0 then
+					local d = (Vector2.new(s.X, s.Y) - center).Magnitude
+					if d < bestD and (not CONFIG.AimWallCheck or aimVisible(model, part.Position)) then
+						best, bestPart, bestD = e, part, d
+					end
+				end
+			end
+		end
+	end
+	return best and { e = best, part = bestPart } or nil
+end
+
+local function onShot()
+	Aim.shotT = 1
+	if Aim.target then
+		Aim.shotPos = Aim.target.part.Position
+		table.insert(Aim.ripples, { pos = Aim.shotPos, t = 0 })
+	end
+end
+
+local WC = findWeaponController()
+local origFire = WC and WC.request_fire
+local oldIndex
+
+if WC and origFire then
+	WC.request_fire = function(self, ...)
+		local t = Aim.target
+		if CONFIG.SilentAim and t and t.part.Parent and t.e.hum.Health > 0 then
+			local cam = Workspace.CurrentCamera
+			if cam then
+				spoofCam = cam
+				spoofCF = CFrame.lookAt(cam.CFrame.Position, t.part.Position)
+			end
+		end
+		local before = self.last_fire_clock
+		local ok, err = pcall(origFire, self, ...)
+		spoofCF, spoofCam = nil, nil
+		if self.last_fire_clock ~= before then onShot() end
+		if not ok then warn("[esp] request_fire:", err) end
+	end
+
+	oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, key)
+		if spoofCF and key == "CFrame" and self == spoofCam and not checkcaller() then
+			return spoofCF
+		end
+		return oldIndex(self, key)
+	end))
+else
+	warn("[esp] WeaponController not found — silent aim visuals only")
+end
+
+-- FOV wheel drawings
+local TICKS = 32
+local fov = {
+	glow      = new("Circle", { Thickness = 7, NumSides = 96, Filled = false, Visible = false, ZIndex = 5 }),
+	ringOut   = new("Circle", { Thickness = 3.5, NumSides = 96, Filled = false, Visible = false, ZIndex = 6, Color = CONFIG.OutlineColor }),
+	ring      = new("Circle", { Thickness = 1.5, NumSides = 96, Filled = false, Visible = false, ZIndex = 7 }),
+	inner     = new("Circle", { Thickness = 1, NumSides = 64, Filled = false, Visible = false, ZIndex = 6 }),
+	dotOut    = new("Circle", { Thickness = 1, NumSides = 16, Filled = true, Visible = false, ZIndex = 9, Color = CONFIG.OutlineColor }),
+	dot       = new("Circle", { Thickness = 1, NumSides = 16, Filled = true, Visible = false, ZIndex = 10 }),
+	lineOut   = line(4.5, 7),
+	line      = line(2, 8),
+	lineFlash = line(5, 8),
+	retOut    = new("Circle", { Thickness = 3.5, NumSides = 32, Filled = false, Visible = false, ZIndex = 8, Color = CONFIG.OutlineColor }),
+	ret       = new("Circle", { Thickness = 1.5, NumSides = 32, Filled = false, Visible = false, ZIndex = 9 }),
+	retDot    = new("Circle", { Thickness = 1, NumSides = 12, Filled = true, Visible = false, ZIndex = 9 }),
+	ticks     = {},
+	ripples   = {},
+}
+fov.lineOut.Color = CONFIG.OutlineColor
+for i = 1, TICKS do fov.ticks[i] = line(2, 7) end
+for i = 1, 4 do
+	fov.ripples[i] = new("Circle", { Thickness = 2, NumSides = 40, Filled = false, Visible = false, ZIndex = 8 })
+end
+
+local function hideFov()
+	for k, d in pairs(fov) do
+		if k == "ticks" or k == "ripples" then
+			for _, x in ipairs(d) do x.Visible = false end
+		else
+			d.Visible = false
+		end
+	end
+end
+
+local function easeOutBack(x)
+	local c1, c3 = 1.70158, 2.70158
+	return 1 + c3 * (x - 1) ^ 3 + c1 * (x - 1) ^ 2
+end
+
+local function updateAim(dt, now)
+	if not CONFIG.SilentAim then hideFov(); Aim.target = nil; return end
+
+	local vp = Camera.ViewportSize
+	local center = Vector2.new(vp.X * 0.5, vp.Y * 0.5)
+
+	local prev = Aim.target
+	Aim.target = pickTarget(center)
+	local t = Aim.target
+	if t and (not prev or prev.e ~= t.e) then
+		Aim.lockT = 0
+		if not prev then Aim.lineEnd = center end
+	end
+
+	Aim.lockLevel = approach(Aim.lockLevel, t and 1 or 0, 10, dt)
+	Aim.shotT = approach(Aim.shotT, 0, 7, dt)
+	Aim.spin = (Aim.spin + dt * (0.35 + 2.4 * Aim.lockLevel + 6 * Aim.shotT)) % (math.pi * 2)
+
+	local lock = Aim.lockLevel
+	local ringCol = CONFIG.FOVColor:Lerp(CONFIG.FOVLockColor, lock)
+	local pulse = 0.5 + 0.5 * math.sin(now * (2.2 + 3 * lock))
+	local r = CONFIG.FOVRadius * (1 + 0.025 * pulse + 0.06 * Aim.shotT)
+
+	fov.glow.Position, fov.glow.Radius, fov.glow.Color = center, r, ringCol
+	fov.glow.Transparency, fov.glow.Visible = 0.06 + 0.14 * pulse + 0.3 * Aim.shotT, true
+	fov.ringOut.Position, fov.ringOut.Radius, fov.ringOut.Transparency, fov.ringOut.Visible = center, r, 0.55, true
+	fov.ring.Position, fov.ring.Radius, fov.ring.Color, fov.ring.Transparency, fov.ring.Visible = center, r, ringCol, 0.75 + 0.25 * pulse, true
+	fov.inner.Position, fov.inner.Radius, fov.inner.Color = center, r * (0.93 - 0.03 * pulse), ringCol
+	fov.inner.Transparency, fov.inner.Visible = 0.12 + 0.12 * lock, true
+
+	-- the wheel: ticks spin, every 4th one is long, lock tightens them inward
+	for i = 1, TICKS do
+		local a = Aim.spin + (i - 1) / TICKS * math.pi * 2
+		local major = (i - 1) % 4 == 0
+		local len = (major and 9 or 4) * (1 + 0.6 * lock)
+		local dir = Vector2.new(math.cos(a), math.sin(a))
+		local tk = fov.ticks[i]
+		tk.From, tk.To = center + dir * (r + 3), center + dir * (r + 3 + len)
+		tk.Color = ringCol
+		tk.Thickness = major and 2 or 1.25
+		tk.Transparency = (major and 0.9 or 0.45) * (0.6 + 0.4 * pulse)
+		tk.Visible = true
+	end
+
+	local dotR = 2.6 + 0.8 * lock + 2 * Aim.shotT
+	fov.dotOut.Position, fov.dotOut.Radius, fov.dotOut.Transparency, fov.dotOut.Visible = center, dotR + 1.5, 0.9, true
+	fov.dot.Position, fov.dot.Radius, fov.dot.Color, fov.dot.Transparency, fov.dot.Visible =
+		center, dotR, Color3.new(1, 1, 1):Lerp(CONFIG.AimLineColor, lock), 1, true
+
+	if t then
+		local hs = Camera:WorldToViewportPoint(t.part.Position)
+		local head = Vector2.new(hs.X, hs.Y)
+		Aim.lockT = math.min(Aim.lockT + dt / 0.14, 1)
+		Aim.lineEnd = Aim.lineEnd and Aim.lineEnd:Lerp(head, 1 - math.exp(-30 * dt)) or head
+		-- once fully extended the line is glued to the head; the shot goes exactly here
+		local tip = Aim.lockT >= 1 and head or center:Lerp(Aim.lineEnd, easeOutBack(Aim.lockT))
+		if Aim.lockT >= 1 then Aim.lineEnd = head end
+		if Aim.shotT > 0.6 then tip, Aim.lineEnd = head, head end
+
+		local lc = CONFIG.AimLineColor:Lerp(Color3.new(1, 1, 1), Aim.shotT * 0.8)
+		setLine(fov.lineOut, center, tip, CONFIG.OutlineColor, 0.8)
+		setLine(fov.line, center, tip, lc, 0.85 + 0.15 * pulse)
+		fov.line.Thickness = 2 + 2 * Aim.shotT
+		if Aim.shotT > 0.02 then
+			setLine(fov.lineFlash, center, tip, Color3.new(1, 1, 1), Aim.shotT * 0.55)
+		else
+			fov.lineFlash.Visible = false
+		end
+
+		local hr = Camera:WorldToViewportPoint((t.part.CFrame * CFrame.new(0, t.part.Size.Y * 0.5, 0)).Position)
+		local headR = math.max((Vector2.new(hr.X, hr.Y) - head).Magnitude, 3)
+		local retR = headR + 4 + 10 * (1 - Aim.lockT) + 3 * pulse
+		fov.retOut.Position, fov.retOut.Radius, fov.retOut.Transparency, fov.retOut.Visible = tip, retR, 0.7, true
+		fov.ret.Position, fov.ret.Radius, fov.ret.Color, fov.ret.Transparency, fov.ret.Visible = tip, retR, lc, Aim.lockT, true
+		fov.retDot.Position, fov.retDot.Radius, fov.retDot.Color, fov.retDot.Transparency, fov.retDot.Visible = tip, 2, lc, Aim.lockT, true
+	else
+		Aim.lineEnd = nil
+		fov.lineOut.Visible, fov.line.Visible, fov.lineFlash.Visible = false, false, false
+		fov.retOut.Visible, fov.ret.Visible, fov.retDot.Visible = false, false, false
+	end
+
+	-- hit ripples anchored in world space so they stay on the spot you shot
+	for i = #Aim.ripples, 1, -1 do
+		local rp = Aim.ripples[i]
+		rp.t += dt / 0.45
+		if rp.t >= 1 then table.remove(Aim.ripples, i) end
+	end
+	while #Aim.ripples > #fov.ripples do table.remove(Aim.ripples, 1) end
+	for i, c in ipairs(fov.ripples) do
+		local rp = Aim.ripples[i]
+		if rp then
+			local s = Camera:WorldToViewportPoint(rp.pos)
+			if s.Z > 0 then
+				local k = 1 - (1 - rp.t) ^ 3
+				c.Position, c.Radius = Vector2.new(s.X, s.Y), 4 + 26 * k
+				c.Color, c.Transparency, c.Thickness = CONFIG.AimLineColor:Lerp(Color3.new(1, 1, 1), 1 - rp.t), (1 - rp.t) * 0.9, 2.5 - 1.5 * k
+				c.Visible = true
+			else
+				c.Visible = false
+			end
+		else
+			c.Visible = false
+		end
+	end
+end
+
 ------------------------------------------------------------------------ status HUD
 
 local hud = text(13)
@@ -517,8 +805,9 @@ local hudFlash = 0
 local function hudText()
 	local function f(b) return b and "on" or "off" end
 	return string.format(
-		"esp  ·  box %s [%s]  ·  skel %s  ·  vis %s  ·  bots %s",
-		f(CONFIG.Box), CONFIG.BoxStyle:lower(), f(CONFIG.Skeleton), f(CONFIG.VisCheck), f(CONFIG.ShowBots))
+		"esp  ·  box %s [%s]  ·  skel %s  ·  vis %s  ·  bots %s  ·  silent %s [%d]%s",
+		f(CONFIG.Box), CONFIG.BoxStyle:lower(), f(CONFIG.Skeleton), f(CONFIG.VisCheck), f(CONFIG.ShowBots),
+		f(CONFIG.SilentAim), CONFIG.FOVRadius, WC and "" or "  (no hook)")
 end
 
 ------------------------------------------------------------------------ wiring
@@ -550,6 +839,9 @@ table.insert(Connections, UserInputService.InputBegan:Connect(function(input, gp
 	elseif k == Enum.KeyCode.F3 then CONFIG.VisCheck = not CONFIG.VisCheck
 	elseif k == Enum.KeyCode.F4 then CONFIG.BoxStyle = CONFIG.BoxStyle == "Corner" and "Full" or "Corner"
 	elseif k == Enum.KeyCode.F5 then CONFIG.ShowBots = not CONFIG.ShowBots
+	elseif k == Enum.KeyCode.F6 then CONFIG.SilentAim = not CONFIG.SilentAim
+	elseif k == Enum.KeyCode.LeftBracket then CONFIG.FOVRadius = math.max(CONFIG.FOVMin, CONFIG.FOVRadius - 20)
+	elseif k == Enum.KeyCode.RightBracket then CONFIG.FOVRadius = math.min(CONFIG.FOVMax, CONFIG.FOVRadius + 20)
 	elseif k == Enum.KeyCode.End then getgenv().__MARA_ESP(); return
 	else return end
 	hudFlash = 1
@@ -569,6 +861,9 @@ table.insert(Connections, RunService.RenderStepped:Connect(function(dt)
 		end
 	end
 
+	local ok, err = pcall(updateAim, dt, now)
+	if not ok then warn("[esp] aim:", err) end
+
 	hudFlash = approach(hudFlash, 0, 3, dt)
 	hud.Text = hudText()
 	hud.Color = Color3.fromRGB(150, 150, 165):Lerp(Color3.fromRGB(255, 255, 255), hudFlash)
@@ -581,5 +876,15 @@ getgenv().__MARA_ESP = function()
 	table.clear(Connections)
 	for model in pairs(Entities) do destroyEntity(model) end
 	pcall(hud.Remove, hud)
+	if WC and origFire then WC.request_fire = origFire end
+	if oldIndex then hookmetamethod(game, "__index", oldIndex) end
+	spoofCF, spoofCam = nil, nil
+	for k, d in pairs(fov) do
+		if k == "ticks" or k == "ripples" then
+			for _, x in ipairs(d) do pcall(x.Remove, x) end
+		else
+			pcall(d.Remove, d)
+		end
+	end
 	getgenv().__MARA_ESP = nil
 end
