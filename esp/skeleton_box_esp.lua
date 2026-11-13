@@ -94,7 +94,8 @@ local CORNERS = {
 
 local function new(class, props)
 	local d = Drawing.new(class)
-	for k, v in pairs(props) do d[k] = v end
+	-- executors disagree on which Drawing props exist; one unknown prop must not kill the script
+	for k, v in pairs(props) do pcall(function() d[k] = v end) end
 	return d
 end
 
@@ -536,19 +537,25 @@ local function tagFrom(name)
 end
 local BARRIER_TAG, GLASS_TAG = tagFrom("barrier_tag"), tagFrom("glass_tag")
 
-local function findWeaponController()
-	local ok, mod = pcall(function()
-		return require(ReplicatedStorage.client.controllers.WeaponController)
-	end)
-	if ok and type(mod) == "table" and rawget(mod, "request_fire") then return mod end
-	if getgc then
-		for _, t in ipairs(getgc(true)) do
-			if type(t) == "table" and rawget(t, "request_fire") and rawget(t, "compute_player_radius") then
-				return t
-			end
+-- every live table that owns request_fire; an executor require can hand back a copy,
+-- so wrap the require result and anything getgc finds
+local function findWeaponControllers()
+	local found, seen = {}, {}
+	local function add(t)
+		if type(t) == "table" and not seen[t] and rawget(t, "request_fire") and rawget(t, "compute_player_radius") then
+			seen[t] = true
+			table.insert(found, t)
 		end
 	end
-	return nil
+	pcall(function()
+		add(require(ReplicatedStorage.client.controllers.WeaponController))
+	end)
+	if getgc then
+		pcall(function()
+			for _, t in ipairs(getgc(true)) do add(t) end
+		end)
+	end
+	return found
 end
 
 local Aim = {
@@ -619,35 +626,85 @@ local function onShot()
 	end
 end
 
-local WC = findWeaponController()
-local origFire = WC and WC.request_fire
+local Hook = { controllers = {}, originals = {}, mode = "none", status = "not installed" }
 local oldIndex
 
-if WC and origFire then
-	WC.request_fire = function(self, ...)
-		local t = Aim.target
-		if CONFIG.SilentAim and t and t.part.Parent and t.e.hum.Health > 0 then
-			local cam = Workspace.CurrentCamera
-			if cam then
-				spoofCam = cam
-				spoofCF = CFrame.lookAt(cam.CFrame.Position, t.part.Position)
+local function aimCFrameFor(cam)
+	local t = Aim.target
+	if not (CONFIG.SilentAim and t and t.part.Parent and t.e.hum.Health > 0) then return nil end
+	return CFrame.lookAt(cam.CFrame.Position, t.part.Position)
+end
+
+local function makeWrapper(orig)
+	return function(self, ...)
+		local cam = Workspace.CurrentCamera
+		local aimCF = cam and aimCFrameFor(cam)
+		local restoreCF
+
+		if aimCF then
+			if Hook.mode == "index" then
+				spoofCam, spoofCF = cam, aimCF
+			else
+				-- no __index hook: point the real camera for this synchronous call, then put it back
+				restoreCF = cam.CFrame
+				cam.CFrame = aimCF
 			end
 		end
+
 		local before = self.last_fire_clock
-		local ok, err = pcall(origFire, self, ...)
+		local ok, err = pcall(orig, self, ...)
+
 		spoofCF, spoofCam = nil, nil
+		if restoreCF then cam.CFrame = restoreCF end
 		if self.last_fire_clock ~= before then onShot() end
 		if not ok then warn("[esp] request_fire:", err) end
 	end
+end
 
-	oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, key)
-		if spoofCF and key == "CFrame" and self == spoofCam and not checkcaller() then
-			return spoofCF
+local function installHooks()
+	local list = findWeaponControllers()
+	if #list == 0 then
+		Hook.status = "WeaponController not found"
+		return
+	end
+
+	if hookmetamethod and checkcaller then
+		local ok = pcall(function()
+			local fn = function(self, key)
+				if spoofCF and key == "CFrame" and self == spoofCam and not checkcaller() then
+					return spoofCF
+				end
+				return oldIndex(self, key)
+			end
+			oldIndex = hookmetamethod(game, "__index", newcclosure and newcclosure(fn) or fn)
+		end)
+		Hook.mode = ok and oldIndex and "index" or "camera"
+	else
+		Hook.mode = "camera"
+	end
+
+	local wrapped = 0
+	for _, t in ipairs(list) do
+		local orig = rawget(t, "request_fire")
+		local ok = pcall(function()
+			if setreadonly then pcall(setreadonly, t, false) end
+			t.request_fire = makeWrapper(orig)
+		end)
+		if ok then
+			wrapped += 1
+			table.insert(Hook.controllers, t)
+			table.insert(Hook.originals, orig)
 		end
-		return oldIndex(self, key)
-	end))
-else
-	warn("[esp] WeaponController not found — silent aim visuals only")
+	end
+	Hook.status = wrapped > 0 and ("hooked x" .. wrapped .. " · " .. Hook.mode) or "controller locked"
+end
+
+local function removeHooks()
+	for i, t in ipairs(Hook.controllers) do
+		pcall(function() t.request_fire = Hook.originals[i] end)
+	end
+	if oldIndex then pcall(hookmetamethod, game, "__index", oldIndex) end
+	spoofCF, spoofCam = nil, nil
 end
 
 -- FOV wheel drawings
@@ -807,7 +864,7 @@ local function hudText()
 	return string.format(
 		"esp  ·  box %s [%s]  ·  skel %s  ·  vis %s  ·  bots %s  ·  silent %s [%d]%s",
 		f(CONFIG.Box), CONFIG.BoxStyle:lower(), f(CONFIG.Skeleton), f(CONFIG.VisCheck), f(CONFIG.ShowBots),
-		f(CONFIG.SilentAim), CONFIG.FOVRadius, WC and "" or "  (no hook)")
+		f(CONFIG.SilentAim), CONFIG.FOVRadius, "  ·  " .. Hook.status)
 end
 
 ------------------------------------------------------------------------ wiring
@@ -876,9 +933,7 @@ getgenv().__MARA_ESP = function()
 	table.clear(Connections)
 	for model in pairs(Entities) do destroyEntity(model) end
 	pcall(hud.Remove, hud)
-	if WC and origFire then WC.request_fire = origFire end
-	if oldIndex then hookmetamethod(game, "__index", oldIndex) end
-	spoofCF, spoofCam = nil, nil
+	removeHooks()
 	for k, d in pairs(fov) do
 		if k == "ticks" or k == "ripples" then
 			for _, x in ipairs(d) do pcall(x.Remove, x) end
@@ -888,3 +943,8 @@ getgenv().__MARA_ESP = function()
 	end
 	getgenv().__MARA_ESP = nil
 end
+
+task.spawn(function()
+	local ok, err = pcall(installHooks)
+	if not ok then Hook.status = "hook error"; warn("[esp] hook install:", err) end
+end)
