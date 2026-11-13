@@ -227,6 +227,7 @@ void App::Init(void* hInstance) {
     db_ = WeaponDb::Load(exeDir_ / "data" / "weapons.json");
     store_ = std::make_unique<Store>(dataDir_ / "profiles");
     overlay_.Create(hInstance);
+    if (loadTexture) logo_.id = loadTexture(exeDir_ / "assets" / "logo.png", logo_.w, logo_.h);
     LoadSettings();
     if (!db_.weapons.empty()) {
         const Weapon* w = db_.Find(loadout_.weapon);
@@ -240,6 +241,20 @@ void App::Shutdown() {
     engine_.Stop();
     SaveSettings();
     overlay_.Destroy();
+    if (freeTexture) {
+        for (auto& [k, t] : sprites_) freeTexture(t.id);
+        freeTexture(logo_.id);
+    }
+    sprites_.clear();
+}
+
+// Drop-in art: <exe>/assets/weapons/<weapon id>.png, side view, muzzle pointing right, transparent background.
+const App::Tex& App::Sprite(const std::string& id) {
+    auto it = sprites_.find(id);
+    if (it != sprites_.end()) return it->second;
+    Tex t;
+    if (loadTexture) t.id = loadTexture(exeDir_ / "assets" / "weapons" / (id + ".png"), t.w, t.h);
+    return sprites_.emplace(id, t).first->second;
 }
 
 void App::Toast(const std::string& a, const std::string& b, unsigned rgb) { overlay_.Show(a, b, rgb); }
@@ -360,6 +375,12 @@ void App::Frame(float dt) {
                      ImGuiWindowFlags_NoSavedSettings);
 
     // Header strip
+    if (logo_.id) {
+        const float sz = ImGui::GetTextLineHeight() * 1.9f;
+        ImGui::Image(reinterpret_cast<ImTextureID>(logo_.id), ImVec2(sz, sz));
+        ImGui::SameLine(0, 12);
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + sz * 0.12f);
+    }
     ImGui::PushFont(fontHead);
     ImGui::TextColored(kAmber, "RECOIL");
     ImGui::SameLine(0, 2);
@@ -485,7 +506,21 @@ void App::DrawCenter(float) {
         const ImVec2 o = ImGui::GetCursorScreenPos();
         const float s = std::min(1.6f, (ImGui::GetContentRegionAvail().x - 40) / 260.f);
         const bool scoped = loadout_.sight != "1.0x";
-        DrawSilhouette(dl, ImVec2(o.x + 20 + slide, o.y + 6), s, w ? w->cls : "AR", scoped, kick_, flash_);
+        const Tex& spr = w ? Sprite(w->id) : logo_;
+        if (w && spr.id && spr.w > 0) {
+            const float boxW = 260 * s, boxH = 84 * s;
+            const float k = std::min(boxW / spr.w, boxH / spr.h);
+            const float iw = spr.w * k, ih = spr.h * k;
+            const ImVec2 a(o.x + 20 + slide - kick_ * 10.f * s, o.y + 6 + (boxH - ih) * 0.5f - kick_ * 3.f * s);
+            dl->AddImage(reinterpret_cast<ImTextureID>(spr.id), a, ImVec2(a.x + iw, a.y + ih), ImVec2(0, 0), ImVec2(1, 1),
+                         Col(ImVec4(1, 1, 1, swap_)));
+            if (flash_ > 0.02f) {
+                const ImVec2 c(a.x + iw + 8 * s, a.y + ih * 0.35f);
+                dl->AddCircleFilled(c, (8.f + 10.f * flash_) * s, Col(kAmber, 0.35f * flash_), 20);
+            }
+        } else {
+            DrawSilhouette(dl, ImVec2(o.x + 20 + slide, o.y + 6), s, w ? w->cls : "AR", scoped, kick_, flash_);
+        }
         ImGui::Dummy(ImVec2(0, 84 * s));
     }
     ImGui::PopStyleVar();
@@ -584,6 +619,12 @@ void App::DrawControls(float dt) {
         const int st = engine_.status.stance.load();
         ImGui::TextColored(kDim, "hold %.1fs  ·  %s%s", hold / 1000.f, StanceName(static_cast<Stance>(st)),
                            engine_.status.ads.load() ? "  ·  ADS" : "");
+        if (mode == Mode::Training)
+            ImGui::TextColored(kTeal, "ADS + hold fire 2s+  ·  hold Q/E whole spray for leans");
+        else if (mode == Mode::Armed && !engine_.status.trigger.load())
+            ImGui::TextColored(kAmber, "ADS + fire to engage  ·  Q/E switches curve live");
+        else
+            ImGui::TextColored(kDim, " ");
         ImGui::PopFont();
     }
 

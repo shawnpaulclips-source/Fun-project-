@@ -42,9 +42,6 @@ public:
     void Start();
     void Stop();
 
-    // Called from the window thread on WM_INPUT for physical devices.
-    void FeedRaw(long dx, long dy);
-
     void SetMode(Mode m);
     Mode GetMode() const { return static_cast<Mode>(status.mode.load()); }
     void SetCompiled(std::shared_ptr<const Compiled> c);
@@ -59,11 +56,13 @@ public:
 
 private:
     void Run();
+    void InputThread();
     Stance PollStance() const;
 
-    std::thread thread_;
+    std::thread thread_, input_;
+    std::atomic<void*> inputHwnd_{nullptr};
     std::atomic<bool> running_{false};
-    std::atomic<long long> rawX_{0}, rawY_{0};
+    std::atomic<long long> rawAcc_[2]{};  // physical mouse counts since last engine tick
     std::atomic<std::shared_ptr<const Compiled>> compiled_;
 
     std::mutex outMu_;

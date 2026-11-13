@@ -1,5 +1,6 @@
 #pragma once
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <string>
 
@@ -24,12 +25,18 @@ public:
     ImFont* fontHead = nullptr;
     ImFont* fontMono = nullptr;
 
+    // Set by the host before Init. Returns an ImTextureID-compatible handle.
+    void* (*loadTexture)(const std::filesystem::path&, int& w, int& h) = nullptr;
+    void (*freeTexture)(void*) = nullptr;
+
 private:
     void SelectWeapon(const Weapon& w);
     void Recompile();
     void Ingest();
     void LoadSettings();
     void SaveSettings();
+    struct Tex { void* id = nullptr; int w = 0, h = 0; };
+    const Tex& Sprite(const std::string& weaponId);
     void Toast(const std::string& a, const std::string& b, unsigned rgb);
 
     void DrawLoadout(float dt);
@@ -43,6 +50,8 @@ private:
     Overlay overlay_;
 
     Loadout loadout_;
+    std::map<std::string, Tex> sprites_;
+    Tex logo_;
     std::string opFilter_;
     char search_[64] = {};
     int viewStance_ = -1;  // -1 = all

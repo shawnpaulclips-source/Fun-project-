@@ -13,6 +13,12 @@
 
 #include "App.h"
 
+#define STB_IMAGE_IMPLEMENTATION
+#define STBI_ONLY_PNG
+#include <stb_image.h>
+
+#include <cstdio>
+
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND, UINT, WPARAM, LPARAM);
 
 namespace {
@@ -60,27 +66,41 @@ void DestroyDevice() {
     if (gDevice) gDevice->Release();
 }
 
-void RegisterRawMouse(HWND hwnd) {
-    RAWINPUTDEVICE rid{};
-    rid.usUsagePage = 0x01;
-    rid.usUsage = 0x02;
-    rid.dwFlags = RIDEV_INPUTSINK;  // keep receiving while the game has focus
-    rid.hwndTarget = hwnd;
-    RegisterRawInputDevices(&rid, 1, sizeof(rid));
+// Loads a PNG into a shader resource view for ImGui. Returns null if the file is missing or bad.
+void* LoadTexture(const std::filesystem::path& file, int& w, int& h) {
+    FILE* f = _wfopen(file.c_str(), L"rb");
+    if (!f) return nullptr;
+    int comp = 0;
+    unsigned char* px = stbi_load_from_file(f, &w, &h, &comp, 4);
+    fclose(f);
+    if (!px) return nullptr;
+    D3D11_TEXTURE2D_DESC td{};
+    td.Width = w;
+    td.Height = h;
+    td.MipLevels = 1;
+    td.ArraySize = 1;
+    td.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    td.SampleDesc.Count = 1;
+    td.Usage = D3D11_USAGE_DEFAULT;
+    td.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+    D3D11_SUBRESOURCE_DATA sd{px, static_cast<UINT>(w * 4), 0};
+    ID3D11Texture2D* tex = nullptr;
+    ID3D11ShaderResourceView* srv = nullptr;
+    if (SUCCEEDED(gDevice->CreateTexture2D(&td, &sd, &tex))) {
+        gDevice->CreateShaderResourceView(tex, nullptr, &srv);
+        tex->Release();
+    }
+    stbi_image_free(px);
+    return srv;
+}
+
+void FreeTexture(void* t) {
+    if (t) static_cast<ID3D11ShaderResourceView*>(t)->Release();
 }
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     if (ImGui_ImplWin32_WndProcHandler(hwnd, msg, wp, lp)) return 1;
     switch (msg) {
-        case WM_INPUT: {
-            RAWINPUT ri;
-            UINT size = sizeof(ri);
-            if (GetRawInputData(reinterpret_cast<HRAWINPUT>(lp), RID_INPUT, &ri, &size, sizeof(RAWINPUTHEADER)) != UINT(-1) &&
-                ri.header.dwType == RIM_TYPEMOUSE && ri.header.hDevice != nullptr &&  // null device = SendInput, ignore
-                !(ri.data.mouse.usFlags & MOUSE_MOVE_ABSOLUTE) && gApp)
-                gApp->GetEngine().FeedRaw(ri.data.mouse.lLastX, ri.data.mouse.lLastY);
-            break;
-        }
         case WM_SIZE:
             if (wp != SIZE_MINIMIZED) { gResizeW = LOWORD(lp); gResizeH = HIWORD(lp); }
             return 0;
@@ -123,6 +143,8 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int) {
 
     WNDCLASSEXW wc{sizeof(wc), CS_CLASSDC, WndProc, 0, 0, hInst, nullptr, LoadCursor(nullptr, IDC_ARROW), nullptr, nullptr,
                    L"RecoilLedger", nullptr};
+    wc.hIcon = LoadIconW(hInst, MAKEINTRESOURCEW(1));
+    wc.hIconSm = wc.hIcon;
     RegisterClassExW(&wc);
     HWND hwnd = CreateWindowW(wc.lpszClassName, L"Recoil Ledger", WS_OVERLAPPEDWINDOW, 100, 80, int(1360 * dpi),
                               int(820 * dpi), nullptr, nullptr, hInst, nullptr);
@@ -136,7 +158,6 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int) {
     }
     ShowWindow(hwnd, SW_SHOWDEFAULT);
     UpdateWindow(hwnd);
-    RegisterRawMouse(hwnd);
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -147,6 +168,8 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int) {
     ImGui_ImplDX11_Init(gDevice, gCtx);
 
     rl::App app(ExeDir(), DataDir());
+    app.loadTexture = LoadTexture;
+    app.freeTexture = FreeTexture;
     gApp = &app;
 
     auto loadFont = [&](const char* file, float px) -> ImFont* {

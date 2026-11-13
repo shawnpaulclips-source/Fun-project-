@@ -216,7 +216,7 @@ Learned Train(const std::vector<Trace>& in) {
     // Recency weights: newest sample weighs most.
     const size_t n = samples.size();
     std::vector<double> w(n);
-    for (size_t i = 0; i < n; ++i) w[i] = keep[i] ? std::pow(0.9, static_cast<double>(n - 1 - i)) : 0.0;
+    for (size_t i = 0; i < n; ++i) w[i] = keep[i] ? std::pow(0.97, static_cast<double>(n - 1 - i)) : 0.0;
 
     L.curve.x.assign(len, 0);
     L.curve.y.assign(len, 0);
