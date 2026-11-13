@@ -30,6 +30,9 @@ local CONFIG = {
 	VisCheck      = true,
 	ShowBots      = true,
 	ShowDummies   = false,
+	DeathStyle    = "Wither", -- "Wither" | "Instant"
+	WitherTime    = 0.8,
+	AshColor      = Color3.fromRGB(90, 86, 82),
 	TeamCheck     = true,
 	MaxDistance   = 1200,
 	Smoothing     = 22,       -- box follow speed, higher = snappier
@@ -210,8 +213,19 @@ local function destroyEntity(model)
 	eachDrawing(e.v, function(d) pcall(d.Remove, d) end)
 end
 
+local IGNORE_FOLDERS = { "Corpses", "Effects", "GlassDebris", "ExplosiveDebris" }
+
+local function inIgnoredFolder(inst)
+	for _, n in ipairs(IGNORE_FOLDERS) do
+		local f = Workspace:FindFirstChild(n)
+		if f and inst:IsDescendantOf(f) then return true end
+	end
+	return false
+end
+
 local function track(model)
 	if Entities[model] or model == LocalPlayer.Character then return end
+	if inIgnoredFolder(model) then return end
 	local hum = model:FindFirstChildOfClass("Humanoid")
 	if not hum then return end
 	local kind, plr = classify(model)
@@ -291,6 +305,73 @@ end
 
 ------------------------------------------------------------------------ render
 
+local function getBones(model, isR15)
+	local out = {}
+	if isR15 then
+		for _, bone in ipairs(R15_BONES) do
+			local a, c = model:FindFirstChild(bone[1]), model:FindFirstChild(bone[2])
+			if a and c then table.insert(out, { a.Position, c.Position }) end
+		end
+	else
+		for _, bone in ipairs(R6_BONES) do
+			local a, c = model:FindFirstChild(bone[1]), model:FindFirstChild(bone[3])
+			if a and c then
+				table.insert(out, { (a.CFrame * CFrame.new(bone[2])).Position, (c.CFrame * CFrame.new(bone[4])).Position })
+			end
+		end
+	end
+	return out
+end
+
+local function isAlive(e)
+	local hum = e.hum
+	return hum.Parent ~= nil and hum.Health > 0 and hum:GetState() ~= Enum.HumanoidStateType.Dead
+end
+
+-- frozen world-space skeleton crumbles: limbs first, each bone shrinks to its midpoint,
+-- sags, greys to ash and fades; head drops and collapses last
+local function renderDeath(e, now)
+	local v, el = e.v, now - e.deathT
+	local T = CONFIG.WitherTime
+	hideAll(v)
+	if CONFIG.DeathStyle ~= "Wither" or not CONFIG.Skeleton or el > T + 0.15 or e.deathAlpha < 0.02 then
+		return
+	end
+
+	local n = #e.deathBones
+	local used = 0
+	for i, bone in ipairs(e.deathBones) do
+		local order = n - i                       -- extremities are listed last, so they go first
+		local k = math.clamp((el - order * (T * 0.03)) / (T * 0.6), 0, 1)
+		local ease = k * k * (3 - 2 * k)
+		local a, b = bone[1], bone[2]
+		local mid = (a + b) * 0.5
+		local sag = Vector3.new(math.sin(i * 1.7) * 0.4 * ease, -1.6 * ease * ease, math.cos(i * 2.3) * 0.4 * ease)
+		local pa, fa = project(mid + (a - mid) * (1 - ease) + sag)
+		local pb, fb = project(mid + (b - mid) * (1 - ease) + sag)
+		if fa and fb and ease < 0.99 then
+			used += 1
+			local col = e.deathColor:Lerp(CONFIG.AshColor, math.min(k * 1.6, 1))
+			local al = e.deathAlpha * (1 - ease)
+			setLine(v.boneOutlines[used], pa, pb, CONFIG.OutlineColor, al * 0.7)
+			setLine(v.bones[used], pa, pb, col, al)
+			v.bones[used].Thickness = 1.5 * (1 - 0.6 * ease)
+		end
+	end
+
+	if e.deathHead then
+		local k = math.clamp((el - n * T * 0.03) / (T * 0.5), 0, 1)
+		local ease = k * k
+		local ctr, front = project(e.deathHead - Vector3.new(0, 1.2 * ease, 0))
+		if front and ease < 0.99 then
+			local r = e.deathHeadR * (1 - 0.8 * ease)
+			local col = e.deathColor:Lerp(CONFIG.AshColor, k)
+			v.headOutline.Position, v.headOutline.Radius, v.headOutline.Transparency, v.headOutline.Visible = ctr, r, e.deathAlpha * (1 - ease) * 0.7, true
+			v.head.Position, v.head.Radius, v.head.Color, v.head.Transparency, v.head.Visible = ctr, r, col, e.deathAlpha * (1 - ease), true
+		end
+	end
+end
+
 local function setLine(l, a, b, col, alpha)
 	l.From, l.To, l.Color, l.Transparency, l.Visible = a, b, col, alpha, true
 end
@@ -317,14 +398,37 @@ local function renderEntity(e, dt, now)
 	local root = model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart
 	local head = model:FindFirstChild("Head")
 
-	local alive = hum.Parent ~= nil and hum.Health > 0 and not e.dying
+	local alive = isAlive(e) and not e.dying
+
+	if alive then
+		if e.deathT then
+			-- same model came back (bots respawn in place): fresh pop-in, no stale box
+			e.deathT, e.box, e.alpha, e.spawnT, e.hp, e.ghost = nil, nil, 0, now, 1, 1
+		end
+		e.wasAlive = true
+	elseif e.wasAlive and not e.deathT then
+		e.deathT = now
+		e.deathAlpha = e.alpha
+		e.deathColor = e.lastSkCol or Color3.new(1, 1, 1)
+		e.deathBones = getBones(model, hum.RigType == Enum.HumanoidRigType.R15)
+		e.deathHead = head and head.Position
+		e.deathHeadR = e.lastHeadR or 4
+		e.alpha = 0
+	end
+
+	if e.deathT then
+		renderDeath(e, now)
+		if e.dying and now - e.deathT > CONFIG.WitherTime + 0.2 then return "remove" end
+		return
+	end
 	local enabled = (e.kind == "Player") or (e.kind == "Bot" and CONFIG.ShowBots) or (e.kind == "Dummy" and CONFIG.ShowDummies)
 	local dist = root and (root.Position - Camera.CFrame.Position).Magnitude or math.huge
 	local inRange = dist <= CONFIG.MaxDistance
 	local shouldShow = alive and enabled and inRange and root ~= nil and not sameTeam(e)
 
 	e.alpha = approach(e.alpha, shouldShow and 1 or 0, shouldShow and CONFIG.FadeSpeed or CONFIG.FadeSpeed * 1.4, dt)
-	if e.dying and e.alpha < 0.02 then return "remove" end
+	if e.dying and e.alpha < 0.02 and not e.wasAlive then return "remove" end
+	if e.dying and e.alpha < 0.02 and not e.deathT then return "remove" end
 	if e.alpha < 0.02 or not root then
 		hideAll(v)
 		if not alive then e.box = nil end
@@ -472,31 +576,15 @@ local function renderEntity(e, dt, now)
 	local used = 0
 	if CONFIG.Skeleton then
 		local skCol = e.visible and Color3.new(1, 1, 1):Lerp(base, 0.45) or scale(base, CONFIG.HiddenTint)
-		if isR15 then
-			for _, bone in ipairs(R15_BONES) do
-				local a, c = model:FindFirstChild(bone[1]), model:FindFirstChild(bone[2])
-				if a and c then
-					local pa, fa = project(a.Position)
-					local pc, fc = project(c.Position)
-					if fa and fc then
-						used += 1
-						setLine(v.boneOutlines[used], pa, pc, CONFIG.OutlineColor, alpha * 0.8)
-						setLine(v.bones[used], pa, pc, skCol, alpha)
-					end
-				end
-			end
-		else
-			for _, bone in ipairs(R6_BONES) do
-				local a, c = model:FindFirstChild(bone[1]), model:FindFirstChild(bone[3])
-				if a and c then
-					local pa, fa = project((a.CFrame * CFrame.new(bone[2])).Position)
-					local pc, fc = project((c.CFrame * CFrame.new(bone[4])).Position)
-					if fa and fc then
-						used += 1
-						setLine(v.boneOutlines[used], pa, pc, CONFIG.OutlineColor, alpha * 0.8)
-						setLine(v.bones[used], pa, pc, skCol, alpha)
-					end
-				end
+		e.lastSkCol = skCol
+		for _, bone in ipairs(getBones(model, isR15)) do
+			local pa, fa = project(bone[1])
+			local pc, fc = project(bone[2])
+			if fa and fc then
+				used += 1
+				setLine(v.boneOutlines[used], pa, pc, CONFIG.OutlineColor, alpha * 0.8)
+				setLine(v.bones[used], pa, pc, skCol, alpha)
+				v.bones[used].Thickness = 1.5
 			end
 		end
 
@@ -505,6 +593,7 @@ local function renderEntity(e, dt, now)
 			local ctr, front = project(head.Position)
 			if front then
 				local r = math.max((top - ctr).Magnitude, 2.5)
+				e.lastHeadR = r
 				v.headOutline.Position, v.headOutline.Radius, v.headOutline.Transparency, v.headOutline.Visible = ctr, r, alpha * 0.8, true
 				v.head.Position, v.head.Radius, v.head.Color, v.head.Transparency, v.head.Visible = ctr, r, skCol, alpha, true
 			else
@@ -601,7 +690,7 @@ end
 local function pickTarget(center)
 	local best, bestPart, bestD = nil, nil, CONFIG.FOVRadius
 	for model, e in pairs(Entities) do
-		if not e.dying and e.hum.Health > 0 and model.Parent
+		if not e.dying and not e.deathT and e.hum.Health > 0 and model.Parent
 			and (e.kind ~= "Dummy" or CONFIG.AimAtDummies) and not sameTeam(e) then
 			local part = aimPart(model)
 			if part then
@@ -913,7 +1002,7 @@ table.insert(Connections, RunService.RenderStepped:Connect(function(dt)
 			if h then e.hum = h; e.box = nil; e.spawnT = now; e.hp, e.ghost = 1, 1 end
 		end
 		local ok, res = pcall(renderEntity, e, dt, now)
-		if (ok and res == "remove") or not model.Parent and e.alpha < 0.02 then
+		if (ok and res == "remove") or (not ok and not model.Parent) then
 			destroyEntity(model)
 		end
 	end
