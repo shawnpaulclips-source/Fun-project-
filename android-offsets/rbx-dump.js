@@ -15,6 +15,11 @@
 
 var MOD = 'libroblox.so';
 
+/* fast mode: scan big heap regions first, stop at the first confirmed DataModel,
+   and remember where it was so the next run skips the sweep entirely. */
+var FAST       = true;
+var HINT_FILE  = '/data/local/tmp/rbx_dm_hint.txt';
+
 /* ---------------------------------------------------------------- helpers */
 
 var PTR = Process.pointerSize;
@@ -234,6 +239,27 @@ function findInstancesByVtable(vptrNum, limit) {
 
     var out = [];
     var ranges = Process.enumerateRanges('rw-');
+
+    /* a cached hit from a previous run? try that exact page first. */
+    if (FAST) {
+        try {
+            var hintTxt = null;
+            try { hintTxt = File.readAllText(HINT_FILE); } catch (e) {}
+            if (hintTxt) {
+                var hintBase = ptr(hintTxt.trim());
+                if (!hintBase.isNull()) {
+                    var hintHits = Memory.scanSync(hintBase, 2 * 1024 * 1024, pattern);
+                    for (var hh = 0; hh < hintHits.length; hh++) {
+                        if (numOf(hintHits[hh].address) % 8 === 0) out.push(hintHits[hh].address);
+                    }
+                }
+            }
+        } catch (e) {}
+    }
+
+    /* big regions hold the DataModel far more often than small ones */
+    ranges.sort(function (a, b) { return b.size - a.size; });
+
     for (var r = 0; r < ranges.length && out.length < limit; r++) {
         if (ranges[r].size > 256 * 1024 * 1024) continue;
         var hits = [];
@@ -431,7 +457,7 @@ function main() {
     log('');
     log('[*] stage 2: DataModel vtable ' + hex(dmVt) + ' (RVA ' + hex(dmVt - baseNum) + ')');
 
-    var cands = findInstancesByVtable(dmVt, 64);
+    var cands = findInstancesByVtable(dmVt, FAST ? 8 : 64);
     log('    candidate DataModel objects: ' + cands.length);
     if (cands.length === 0) {
         log('[!] none live. join a game first, then re-run.');
@@ -460,6 +486,16 @@ function main() {
     if (dm === null) {
         log('[!] found DataModel-shaped objects but could not confirm services. widen MAX_PROBE and re-run.');
         return;
+    }
+
+    if (FAST) {
+        try {
+            /* round down to a page so the hint covers the whole allocation */
+            var pg = ptr(numOf(dm) & ~0xFFF);
+            var fh = new File(HINT_FILE, 'w');
+            fh.write(pg.toString());
+            fh.close();
+        } catch (e) {}
     }
 
     log('');

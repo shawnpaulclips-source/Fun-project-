@@ -150,3 +150,75 @@ automatically. That is the whole point of probing rather than hardcoding.
 | `pull-lib.sh` | pull splits, extract `libroblox.so`, fingerprint it |
 | `rbx-dump.js` | Frida: RTTI sweep, DataModel discovery, member probe, tree proof, JSON |
 | `ghidra_rbx_rtti.py` | Ghidra: static RTTI → vtable RVAs, plus flag-name string RVAs |
+
+---
+
+# Faster, and fully on-phone
+
+Two speed problems: the dump is slow, and you were planning to shuttle the binary to a PC.
+Both go away on a rooted device.
+
+## No PC in the loop
+
+`termux-setup.sh` stands the whole toolchain up on the phone itself — Python, Frida,
+frida-server (version-matched and started as root), rizin, and the Python deps. After it runs
+you dump offsets on the device and never touch a desktop:
+
+```sh
+./termux-setup.sh
+python3 rbx_static.py dump/libroblox.so -o dump/static.json   # flags + vtables, no process
+frida -U -n com.roblox.client -l rbx-dump.js -o dump/dynamic.txt  # live member offsets, in a game
+```
+
+Put `com.roblox.client` in the Zygisk DenyList first, and `setenforce 0` while you test if
+SELinux blocks the attach. frida-server dies on reboot; `su -c "/data/local/tmp/frida-server -D"`
+brings it back.
+
+## Static pass runs on the phone now
+
+`rbx_static.py` replaces Ghidra for the parts that don't need a disassembler. It reads the ELF
+sections directly and does the RTTI walk in pure Python — vtable RVAs and every FFlag/FInt/
+FString name string, in seconds, on-device. Ghidra was the bottleneck (hours of auto-analysis
+on a 150MB stripped binary); you only need it, or rizin on the phone, for the one thing the
+static sweep can't finish: xref'ing a flag-name string to the global it registers into. rizin
+is in the setup for exactly that follow-up.
+
+## Dynamic pass got a fast mode
+
+`rbx-dump.js` now defaults `FAST = true`:
+
+- Heap regions scanned largest-first — the DataModel lives in a big allocation, so it surfaces
+  almost immediately instead of after grinding every small mapping.
+- Stops at the first confirmed DataModel instead of collecting 64 candidates.
+- Caches the winning page to `/data/local/tmp/rbx_dm_hint.txt` and tries it first next run, so
+  repeat dumps skip the sweep entirely.
+
+## Don't re-dump everything each update
+
+The RTTI sweep is version-independent — the class→vtable map rebuilds itself free every run.
+What actually moves between updates is the member offsets and the flag table. So after an
+update: re-run the dynamic pass (fast, cached), and diff the new `static.json` flag RVAs
+against the old. You're chasing a handful of changed numbers, not redoing the whole dump.
+
+---
+
+# Where this is going — Marginalia
+
+The dump is step one. The thing it feeds is **Marginalia** — the notes you write in the margins
+of someone else's text. The build splits into three layers, and it's worth being straight about
+which are easy and which is the grind:
+
+- **UI + script layer** — floating launch button, panel, editor, the feature toggles, the script
+  library. Pure client-side. No offsets needed, builds independently.
+- **Execution harness** — Frida injects into `libroblox.so`, finds the Luau global state off the
+  offsets `rbx-dump.js` produces, grabs a thread, bumps identity, runs Luau. This is the real
+  executor core and it wires directly to `dynamic.json`.
+- **VM / identity / integrity** — the part that is a moving target. Roblox mutates the Luau VM,
+  encrypts bytecode, and ships anticheat changes on a weekly cadence. This is the layer every
+  named executor burns a team on, re-done every update. I build against your dump; it is not a
+  one-and-done.
+
+The executor is **not inside the APK**. Decompiling Roblox gets you the offsets and structure to
+attack it with — the executor is separate software that does the attacking. So the order is: get
+a clean dump off your phone, send me `static.json` + `dynamic.json`, and I wire the harness. The
+UI and the 30-feature layer I start regardless, since they don't wait on offsets.
