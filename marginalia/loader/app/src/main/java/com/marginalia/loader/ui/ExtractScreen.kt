@@ -16,6 +16,7 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,7 +42,8 @@ fun ExtractScreen() {
     var query by remember { mutableStateOf("") }
     var selected by remember { mutableStateOf<AppEntry?>(null) }
     var busy by remember { mutableStateOf(false) }
-    var progress by remember { mutableStateOf(0f) }
+    var currentStage by remember { mutableStateOf<Stage?>(null) }
+    val fractions = remember { mutableStateMapOf<Stage, Float>() }
     var note by remember { mutableStateOf("") }
     var result by remember { mutableStateOf<Pair<File, LibInfo?>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -106,11 +108,18 @@ fun ExtractScreen() {
                         maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
 
-                    AnimatedVisibility(busy) {
-                        Column(Modifier.padding(top = 12.dp)) {
-                            ProgressBar(progress)
-                            Spacer(Modifier.height(6.dp))
-                            Text(note, style = MaterialTheme.typography.labelSmall, color = Ink)
+                    AnimatedVisibility(busy || result != null) {
+                        Column(Modifier.padding(top = 14.dp)) {
+                            ExtractPipeline(
+                                current = currentStage,
+                                fractions = fractions,
+                                done = result != null,
+                            )
+                            if (busy) {
+                                Spacer(Modifier.height(10.dp))
+                                Text(note, style = MaterialTheme.typography.labelSmall, color = Ink,
+                                    fontFamily = FontFamily.Monospace)
+                            }
                         }
                     }
 
@@ -128,12 +137,17 @@ fun ExtractScreen() {
                     Button(
                         onClick = {
                             if (busy) return@Button
-                            busy = true; progress = 0f; note = "starting"; result = null; error = null
+                            busy = true; note = "starting"; result = null; error = null
+                            currentStage = null; fractions.clear()
                             scope.launch(Dispatchers.Default) {
                                 Extractor.extract(context, app) { step ->
                                     when (step) {
-                                        is Step.Progress -> { progress = step.fraction; note = step.note }
-                                        is Step.Done -> { busy = false; progress = 1f; result = step.zip to step.lib }
+                                        is Step.Progress -> {
+                                            currentStage = step.stage
+                                            fractions[step.stage] = step.stageFraction
+                                            note = step.note
+                                        }
+                                        is Step.Done -> { busy = false; result = step.zip to step.lib }
                                         is Step.Failed -> { busy = false; error = step.reason }
                                     }
                                 }
