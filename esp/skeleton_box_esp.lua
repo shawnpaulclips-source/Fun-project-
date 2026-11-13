@@ -770,19 +770,25 @@ local function pickTarget(center)
 		end
 	end
 	table.sort(cands, function(a, b) return a.score < b.score end)
+	local preview
 	for _, c in ipairs(cands) do
 		local vis = aimVisible(c.e.model, c.part.Position)
 		if vis or CONFIG.WallMode or not CONFIG.AimWallCheck then
 			c.occluded = not vis
 			return c
 		end
+		if not preview then
+			c.occluded, c.preview = true, true
+			preview = c
+		end
 	end
-	return nil
+	-- wall mode off: still draw a line to the nearest head behind a wall, but never fire at it
+	return preview
 end
 
 local function onShot()
 	Aim.shotT = 1
-	if Aim.target then
+	if Aim.target and not Aim.target.preview then
 		Aim.shotPos = Aim.target.part.Position
 		table.insert(Aim.ripples, { pos = Aim.shotPos, t = 0 })
 	end
@@ -793,7 +799,7 @@ local oldIndex, oldNamecall
 
 local function aimCFrameFor(cam)
 	local t = Aim.target
-	if not (CONFIG.SilentAim and t and t.part.Parent and isAlive(t.e)) then return nil end
+	if not (CONFIG.SilentAim and t and not t.preview and t.part.Parent and isAlive(t.e)) then return nil end
 	local head = t.part.Position
 	local origin = cam.CFrame.Position
 	if CONFIG.WallMode and t.occluded and (Hook.wallMode == "origin" or CONFIG.WallOrigin == "PastWall") then
@@ -1026,8 +1032,10 @@ local function updateAim(dt, now)
 
 		local baseLc = t.occluded and CONFIG.WallColor or CONFIG.AimLineColor
 		local lc = baseLc:Lerp(Color3.new(1, 1, 1), Aim.shotT * 0.8)
-		setLine(fov.lineOut, center, tip, CONFIG.OutlineColor, 0.8)
-		setLine(fov.line, center, tip, lc, 0.85 + 0.15 * pulse)
+		-- preview (wall mode off) flickers dim so it reads as "not armed"
+		local lineA = t.preview and (0.25 + 0.3 * pulse) or (0.85 + 0.15 * pulse)
+		setLine(fov.lineOut, center, tip, CONFIG.OutlineColor, t.preview and 0.35 or 0.8)
+		setLine(fov.line, center, tip, lc, lineA)
 		fov.line.Thickness = 2 + 2 * Aim.shotT
 		if Aim.shotT > 0.02 then
 			setLine(fov.lineFlash, center, tip, Color3.new(1, 1, 1), Aim.shotT * 0.55)
@@ -1109,8 +1117,9 @@ table.insert(Connections, Workspace:GetPropertyChangedSignal("CurrentCamera"):Co
 	Camera = Workspace.CurrentCamera
 end))
 
-table.insert(Connections, UserInputService.InputBegan:Connect(function(input, gp)
-	if gp then return end
+table.insert(Connections, UserInputService.InputBegan:Connect(function(input)
+	-- the game sinks keys through its own input stack, so gameProcessed is unreliable; only skip typing
+	if UserInputService:GetFocusedTextBox() then return end
 	local k = input.KeyCode
 	if k == Enum.KeyCode.F1 then CONFIG.Box = not CONFIG.Box
 	elseif k == Enum.KeyCode.F2 then CONFIG.Skeleton = not CONFIG.Skeleton
