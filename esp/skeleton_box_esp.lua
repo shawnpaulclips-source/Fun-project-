@@ -4,6 +4,7 @@
 
 	F1  box          F2  skeleton       F3  visibility check
 	F4  box style    F5  bots on/off    F6  silent aim    F7  wall mode (experimental)
+	F8  wall origin: camera / past-wall
 	[ / ]  shrink / grow fov            END unload
 ]]
 
@@ -54,6 +55,7 @@ local CONFIG = {
 	AimAtDummies  = false,
 	AimPriority   = "Distance", -- "Distance" (closest in 3D inside the wheel) | "Crosshair"
 	WallMode      = false,      -- F7: target + fire through walls
+	WallOrigin    = "Camera",   -- F8: "Camera" (real origin in packet) | "PastWall" (origin just past the last wall)
 	WallColor     = Color3.fromRGB(190, 110, 255),
 	FOVRadius     = 140,
 	FOVMin        = 40,
@@ -723,6 +725,15 @@ local function aimVisible(model, point)
 	return Workspace:Raycast(o, point - o, aimRay) == nil
 end
 
+-- cast from the head back toward the camera: the first surface hit is the wall nearest the
+-- target, so an origin just on the head side of it has clean line of sight with minimal shift
+local function pastWallOrigin(model, head, camPos)
+	aimVisible(model, head) -- refreshes aimRay's exclusion list for this target
+	local hit = Workspace:Raycast(head, camPos - head, aimRay)
+	if not hit then return camPos end
+	return hit.Position + (head - hit.Position).Unit * 0.6
+end
+
 local function pickTarget(center)
 	-- gather everything inside the wheel, cheapest score first, then wall-check in that order
 	local camPos = Camera.CFrame.Position
@@ -770,9 +781,8 @@ local function aimCFrameFor(cam)
 	if not (CONFIG.SilentAim and t and t.part.Parent and isAlive(t.e)) then return nil end
 	local head = t.part.Position
 	local origin = cam.CFrame.Position
-	if CONFIG.WallMode and t.occluded and Hook.wallMode == "origin" then
-		-- no __namecall: start the shot just in front of the head, past the wall
-		origin = head + (origin - head).Unit * 2.5
+	if CONFIG.WallMode and t.occluded and (Hook.wallMode == "origin" or CONFIG.WallOrigin == "PastWall") then
+		origin = pastWallOrigin(t.e.model, head, origin)
 	end
 	return CFrame.lookAt(origin, head)
 end
@@ -1060,7 +1070,7 @@ local function hudText()
 		"esp  ·  box %s [%s]  ·  skel %s  ·  vis %s  ·  bots %s  ·  silent %s [%d]%s",
 		f(CONFIG.Box), CONFIG.BoxStyle:lower(), f(CONFIG.Skeleton), f(CONFIG.VisCheck), f(CONFIG.ShowBots),
 		f(CONFIG.SilentAim), CONFIG.FOVRadius,
-		(CONFIG.WallMode and ("  ·  WALLS [" .. Hook.wallMode .. "]") or "") .. "  ·  " .. Hook.status)
+		(CONFIG.WallMode and ("  ·  WALLS [" .. Hook.wallMode .. " / " .. CONFIG.WallOrigin:lower() .. "]") or "") .. "  ·  " .. Hook.status)
 end
 
 ------------------------------------------------------------------------ wiring
@@ -1094,6 +1104,7 @@ table.insert(Connections, UserInputService.InputBegan:Connect(function(input, gp
 	elseif k == Enum.KeyCode.F5 then CONFIG.ShowBots = not CONFIG.ShowBots
 	elseif k == Enum.KeyCode.F6 then CONFIG.SilentAim = not CONFIG.SilentAim
 	elseif k == Enum.KeyCode.F7 then CONFIG.WallMode = not CONFIG.WallMode
+	elseif k == Enum.KeyCode.F8 then CONFIG.WallOrigin = CONFIG.WallOrigin == "Camera" and "PastWall" or "Camera"
 	elseif k == Enum.KeyCode.LeftBracket then CONFIG.FOVRadius = math.max(CONFIG.FOVMin, CONFIG.FOVRadius - 20)
 	elseif k == Enum.KeyCode.RightBracket then CONFIG.FOVRadius = math.min(CONFIG.FOVMax, CONFIG.FOVRadius + 20)
 	elseif k == Enum.KeyCode.End then getgenv().__MARA_ESP(); return
