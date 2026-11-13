@@ -1,0 +1,28 @@
+{
+  "name": "reading-room",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "start": "react-native start",
+    "android": "react-native run-android",
+    "ios": "react-native run-ios",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "2.1.0",
+    "react": "18.3.1",
+    "react-native": "0.76.5",
+    "react-native-gesture-handler": "2.20.2",
+    "react-native-reanimated": "3.16.1",
+    "react-native-safe-area-context": "4.14.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.2",
+    "@react-native/babel-preset": "0.76.5",
+    "@react-native/metro-config": "0.76.5",
+    "@react-native/typescript-config": "0.76.5",
+    "@types/react": "^18.3.12",
+    "typescript": "5.0.4"
+  }
+}
