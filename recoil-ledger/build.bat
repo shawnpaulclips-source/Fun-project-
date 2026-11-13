@@ -47,13 +47,22 @@ if exist "%BUILD%\CMakeCache.txt" (
   findstr /c:"CMAKE_GENERATOR:INTERNAL=%GEN%" "%BUILD%\CMakeCache.txt" >nul 2>&1 || rmdir /s /q "%BUILD%"
 )
 
+rem Builds from before the static-CRT fix left /MD objects behind; drop that cache once.
+if exist "%BUILD%\CMakeCache.txt" (
+  findstr /c:"CMAKE_MSVC_RUNTIME_LIBRARY:" "%BUILD%\CMakeCache.txt" >nul 2>&1 || rmdir /s /q "%BUILD%"
+)
+if exist "%BUILD%\RecoilLedger.exe" del /q "%BUILD%\RecoilLedger.exe" >nul 2>&1
+
 echo [+] Configuring...
-"%CMAKE%" -S "%ROOT%" -B "%BUILD%" -G "%GEN%" -DCMAKE_BUILD_TYPE=Release > "%LOG%" 2>&1
-if errorlevel 1 goto :buildfail
+"%CMAKE%" -S "%ROOT%" -B "%BUILD%" -G "%GEN%" -DCMAKE_BUILD_TYPE=Release -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded > "%LOG%" 2>&1
+set "RC=%ERRORLEVEL%"
+if not "%RC%"=="0" goto :buildfail
 
 echo [+] Compiling (first build takes a minute)...
 "%CMAKE%" --build "%BUILD%" --config Release >> "%LOG%" 2>&1
-if errorlevel 1 goto :buildfail
+set "RC=%ERRORLEVEL%"
+if not "%RC%"=="0" goto :buildfail
+findstr /c:"build stopped" /c:"fatal error" /c:": error " "%LOG%" >nul 2>&1 && goto :buildfail
 
 rem Find the exe wherever the generator put it.
 set "BUILT="

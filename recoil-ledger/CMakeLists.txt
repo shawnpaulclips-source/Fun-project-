@@ -1,5 +1,13 @@
 cmake_minimum_required(VERSION 3.20)
+cmake_policy(SET CMP0091 NEW)
+# Static CRT for every target (exe runs without the VC++ redist). Must be set before any target exists,
+# otherwise libraries default to /MD and the link fails with duplicate CRT symbols.
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 project(RecoilLedger CXX)
+
+if(MSVC)
+  add_compile_options(/utf-8 /MP)
+endif()
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -8,10 +16,6 @@ set(TP ${CMAKE_SOURCE_DIR}/third_party)
 add_library(rl_model STATIC src/Model.cpp)
 target_include_directories(rl_model PUBLIC src ${TP})
 
-if(MSVC)
-  add_compile_options(/utf-8 /MP)
-  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")  # static CRT: exe runs without redist
-endif()
 
 option(RL_BUILD_TESTS "Build trainer tests (fetches doctest)" OFF)
 if(RL_BUILD_TESTS)
