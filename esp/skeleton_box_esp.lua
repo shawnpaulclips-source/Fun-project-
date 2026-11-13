@@ -707,8 +707,8 @@ local aimRay = RaycastParams.new()
 aimRay.FilterType = Enum.RaycastFilterType.Exclude
 aimRay.IgnoreWater = true
 
--- mirror the game's own world-cast exclusions so "visible" means "the shot connects"
-local function aimVisible(model, point)
+-- build the exclude list matching the game's own world-cast exclusions
+local function buildAimExclude(model)
 	local ex = { model, Camera }
 	if LocalPlayer.Character then table.insert(ex, LocalPlayer.Character) end
 	for _, n in ipairs({ "Effects", "Corpses", "GlassDebris", "ExplosiveDebris" }) do
@@ -718,9 +718,20 @@ local function aimVisible(model, point)
 	for _, p in ipairs(Players:GetPlayers()) do
 		if p.Character then table.insert(ex, p.Character) end
 	end
+	-- exclude bot and dummy models so their bodies don't count as occluders
+	for m, e in pairs(Entities) do
+		if m ~= model and (e.kind == "Bot" or e.kind == "Dummy") and m.Parent then
+			table.insert(ex, m)
+		end
+	end
 	if BARRIER_TAG then for _, x in ipairs(CollectionService:GetTagged(BARRIER_TAG)) do table.insert(ex, x) end end
 	if GLASS_TAG then for _, x in ipairs(CollectionService:GetTagged(GLASS_TAG)) do table.insert(ex, x) end end
-	aimRay.FilterDescendantsInstances = ex
+	return ex
+end
+
+-- mirror the game's own world-cast exclusions so "visible" means "the shot connects"
+local function aimVisible(model, point)
+	aimRay.FilterDescendantsInstances = buildAimExclude(model)
 	local o = Camera.CFrame.Position
 	return Workspace:Raycast(o, point - o, aimRay) == nil
 end
@@ -728,10 +739,14 @@ end
 -- cast from the head back toward the camera: the first surface hit is the wall nearest the
 -- target, so an origin just on the head side of it has clean line of sight with minimal shift
 local function pastWallOrigin(model, head, camPos)
-	aimVisible(model, head) -- refreshes aimRay's exclusion list for this target
+	aimRay.FilterDescendantsInstances = buildAimExclude(model)
 	local hit = Workspace:Raycast(head, camPos - head, aimRay)
 	if not hit then return camPos end
-	return hit.Position + (head - hit.Position).Unit * 0.6
+	local toHead = head - hit.Position
+	local dist = toHead.Magnitude
+	if dist < 0.01 then return head end
+	local offset = math.min(0.6, dist * 0.8)
+	return hit.Position + toHead.Unit * offset
 end
 
 local function pickTarget(center)
@@ -1070,7 +1085,7 @@ local function hudText()
 		"esp  ·  box %s [%s]  ·  skel %s  ·  vis %s  ·  bots %s  ·  silent %s [%d]%s",
 		f(CONFIG.Box), CONFIG.BoxStyle:lower(), f(CONFIG.Skeleton), f(CONFIG.VisCheck), f(CONFIG.ShowBots),
 		f(CONFIG.SilentAim), CONFIG.FOVRadius,
-		(CONFIG.WallMode and ("  ·  WALLS [" .. Hook.wallMode .. " / " .. CONFIG.WallOrigin:lower() .. "]") or "") .. "  ·  " .. Hook.status)
+		(CONFIG.WallMode and ("  ·  WALLS [" .. Hook.wallMode .. (Hook.wallMode == "namecall" and (" / " .. CONFIG.WallOrigin:lower()) or " / shifted") .. "]") or "") .. "  ·  " .. Hook.status)
 end
 
 ------------------------------------------------------------------------ wiring
