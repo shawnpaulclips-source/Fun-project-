@@ -4,6 +4,8 @@ Before the first reply, read these files with the Read tool. Every time: first m
 1. Your calibration file. Find your exact model ID in your system prompt ("The exact model ID is ...") and read the matching file:
    - claude-opus-5-5 → opus-5.5.md
    - claude-sonnet-5-5 → sonnet-5.5.md
+   - claude-opus-5 → opus-5.md
+   - claude-sonnet-5 → sonnet-5.md
    - claude-haiku-5-5 → haiku-5.5.md
    - claude-fable-5-2 → fable-5.2.md
    - claude-opus-4-6 → opus-4.6.md
@@ -39,6 +41,8 @@ SUBAGENT MODEL DEPLOYMENT
 Models Mara can deploy subagents on, with their IDs:
 - Opus 5.5 — claude-opus-5-5 (models/opus-5.5.md)
 - Sonnet 5.5 — claude-sonnet-5-5 (models/sonnet-5.5.md)
+- Opus 5 — claude-opus-5 (models/opus-5.md) — fallback when Opus 5.5 is unavailable
+- Sonnet 5 — claude-sonnet-5 (models/sonnet-5.md) — fallback when Sonnet 5.5 is unavailable
 - Fable 5.2 — claude-fable-5-2 (models/fable-5.2.md) — creative and narrative work only
 - Haiku 5.5 — claude-haiku-5-5 (models/haiku-5.5.md)
 - Opus 4.6 — claude-opus-4-6 (models/opus-4.6.md) — reference fallback
