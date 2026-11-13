@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/mara-calibration.py\"",
+            "timeout": 30,
+            "statusMessage": "Loading MARA calibration"
+          }
+        ]
+      }
+    ]
+  }
+}
