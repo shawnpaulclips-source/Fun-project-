@@ -1,0 +1,17 @@
+{
+  "switchModelsOnFlag": false,
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File C:/Users/shawn/.claude/hooks/mara-calibration.ps1",
+            "timeout": 30,
+            "statusMessage": "Loading MARA calibration"
+          }
+        ]
+      }
+    ]
+  }
+}
