@@ -18,6 +18,7 @@
 #include <stb_image.h>
 
 #include <cstdio>
+#include <cwchar>
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND, UINT, WPARAM, LPARAM);
 
@@ -135,9 +136,21 @@ std::filesystem::path DataDir() {
     return out;
 }
 
+LONG WINAPI CrashFilter(EXCEPTION_POINTERS* ep) {
+    wchar_t msg[256];
+    swprintf(msg, 256, L"Recoil Ledger crashed (code 0x%08X at %p).\n\nSend this to whoever built it.",
+             ep->ExceptionRecord->ExceptionCode, ep->ExceptionRecord->ExceptionAddress);
+    MessageBoxW(nullptr, msg, L"Recoil Ledger", MB_ICONERROR);
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
 }  // namespace
 
 int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int) {
+    SetUnhandledExceptionFilter(CrashFilter);
+    if (!std::filesystem::exists(ExeDir() / "data" / "weapons.json"))
+        MessageBoxW(nullptr, L"data\\weapons.json is missing next to the exe. Run build.bat again, or copy the data folder.",
+                    L"Recoil Ledger", MB_ICONWARNING);
     ImGui_ImplWin32_EnableDpiAwareness();
     const float dpi = ImGui_ImplWin32_GetDpiScaleForMonitor(MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY));
 
