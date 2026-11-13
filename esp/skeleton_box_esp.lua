@@ -3,7 +3,7 @@
 	players + bots (Dummy-template rigs tagged with BotUsername) + training dummies
 
 	F1  box          F2  skeleton       F3  visibility check
-	F4  box style    F5  bots on/off    F6  silent aim
+	F4  box style    F5  bots on/off    F6  silent aim    F7  wall mode (experimental)
 	[ / ]  shrink / grow fov            END unload
 ]]
 
@@ -52,6 +52,9 @@ local CONFIG = {
 	SilentAim     = true,
 	AimWallCheck  = true,     -- server rejects shots a wall eats first, so skip occluded heads
 	AimAtDummies  = false,
+	AimPriority   = "Distance", -- "Distance" (closest in 3D inside the wheel) | "Crosshair"
+	WallMode      = false,      -- F7: target + fire through walls
+	WallColor     = Color3.fromRGB(190, 110, 255),
 	FOVRadius     = 140,
 	FOVMin        = 40,
 	FOVMax        = 500,
@@ -240,7 +243,14 @@ local function track(model)
 	e.name = displayName(e)
 
 	table.insert(e.conns, model.AncestryChanged:Connect(function(_, parent)
-		if not parent then e.dying = true end
+		if not parent then
+			e.dying = true
+		elseif e.killed then
+			e.killed, e.sawHidden = nil, false  -- moved to lobby folder = reused
+		end
+	end))
+	table.insert(e.conns, model:GetAttributeChangedSignal("InRound"):Connect(function()
+		if model:GetAttribute("InRound") == true then e.killed, e.sawHidden = nil, false end
 	end))
 	table.insert(e.conns, model:GetAttributeChangedSignal("BotUsername"):Connect(function()
 		e.kind = classify(model) or e.kind
@@ -323,9 +333,35 @@ local function getBones(model, isR15)
 	return out
 end
 
+-- CorpseController never kills the character: it clones a ragdoll into Corpses and forces
+-- LocalTransparencyModifier = 1 on the real model every frame while the server reuses it.
+-- So "dead" = kill event seen, or body locally hidden, or the classic humanoid signals.
+local function bodyHidden(model)
+	local h = model:FindFirstChild("Head") or model:FindFirstChild("UpperTorso") or model:FindFirstChild("Torso")
+	return h ~= nil and h:IsA("BasePart") and h.LocalTransparencyModifier >= 0.99
+end
+
 local function isAlive(e)
 	local hum = e.hum
-	return hum.Parent ~= nil and hum.Health > 0 and hum:GetState() ~= Enum.HumanoidStateType.Dead
+	if hum.Parent == nil or hum.Health <= 0 or hum:GetState() == Enum.HumanoidStateType.Dead then return false end
+	local hidden = bodyHidden(e.model)
+	if hidden then e.sawHidden = true end
+	if e.killed then
+		-- revive: unhidden after being hidden, or 8s safety (e.g. corpses lever off and never hidden)
+		if (e.sawHidden and not hidden) or os.clock() - e.killed > 8 then
+			e.killed, e.sawHidden = nil, false
+		else
+			return false
+		end
+	end
+	return not hidden
+end
+
+local function markKilled(victim)
+	local model = victim
+	if typeof(victim) == "Instance" and victim:IsA("Player") then model = victim.Character end
+	local e = model and Entities[model]
+	if e then e.killed, e.sawHidden = os.clock(), false end
 end
 
 -- frozen world-space skeleton crumbles: limbs first, each bone shrinks to its midpoint,
@@ -688,23 +724,34 @@ local function aimVisible(model, point)
 end
 
 local function pickTarget(center)
-	local best, bestPart, bestD = nil, nil, CONFIG.FOVRadius
+	-- gather everything inside the wheel, cheapest score first, then wall-check in that order
+	local camPos = Camera.CFrame.Position
+	local cands = {}
 	for model, e in pairs(Entities) do
-		if not e.dying and not e.deathT and e.hum.Health > 0 and model.Parent
+		if not e.dying and not e.deathT and model.Parent and isAlive(e)
 			and (e.kind ~= "Dummy" or CONFIG.AimAtDummies) and not sameTeam(e) then
 			local part = aimPart(model)
 			if part then
 				local s = Camera:WorldToViewportPoint(part.Position)
 				if s.Z > 0 then
-					local d = (Vector2.new(s.X, s.Y) - center).Magnitude
-					if d < bestD and (not CONFIG.AimWallCheck or aimVisible(model, part.Position)) then
-						best, bestPart, bestD = e, part, d
+					local sd = (Vector2.new(s.X, s.Y) - center).Magnitude
+					if sd <= CONFIG.FOVRadius then
+						local score = CONFIG.AimPriority == "Crosshair" and sd or (part.Position - camPos).Magnitude
+						table.insert(cands, { e = e, part = part, score = score })
 					end
 				end
 			end
 		end
 	end
-	return best and { e = best, part = bestPart } or nil
+	table.sort(cands, function(a, b) return a.score < b.score end)
+	for _, c in ipairs(cands) do
+		local vis = aimVisible(c.e.model, c.part.Position)
+		if vis or CONFIG.WallMode or not CONFIG.AimWallCheck then
+			c.occluded = not vis
+			return c
+		end
+	end
+	return nil
 end
 
 local function onShot()
@@ -715,13 +762,19 @@ local function onShot()
 	end
 end
 
-local Hook = { controllers = {}, originals = {}, mode = "none", status = "not installed" }
-local oldIndex
+local Hook = { controllers = {}, originals = {}, signals = {}, mode = "none", wallMode = "origin", wallShot = false, status = "not installed" }
+local oldIndex, oldNamecall
 
 local function aimCFrameFor(cam)
 	local t = Aim.target
-	if not (CONFIG.SilentAim and t and t.part.Parent and t.e.hum.Health > 0) then return nil end
-	return CFrame.lookAt(cam.CFrame.Position, t.part.Position)
+	if not (CONFIG.SilentAim and t and t.part.Parent and isAlive(t.e)) then return nil end
+	local head = t.part.Position
+	local origin = cam.CFrame.Position
+	if CONFIG.WallMode and t.occluded and Hook.wallMode == "origin" then
+		-- no __namecall: start the shot just in front of the head, past the wall
+		origin = head + (origin - head).Unit * 2.5
+	end
+	return CFrame.lookAt(origin, head)
 end
 
 local function makeWrapper(orig)
@@ -730,6 +783,8 @@ local function makeWrapper(orig)
 		local aimCF = cam and aimCFrameFor(cam)
 		local restoreCF
 
+		local t = Aim.target
+		Hook.wallShot = aimCF ~= nil and CONFIG.WallMode and t ~= nil and t.occluded and Hook.wallMode == "namecall"
 		if aimCF then
 			if Hook.mode == "index" then
 				spoofCam, spoofCF = cam, aimCF
@@ -744,6 +799,7 @@ local function makeWrapper(orig)
 		local ok, err = pcall(orig, self, ...)
 
 		spoofCF, spoofCam = nil, nil
+		Hook.wallShot = false
 		if restoreCF then cam.CFrame = restoreCF end
 		if self.last_fire_clock ~= before then onShot() end
 		if not ok then warn("[esp] request_fire:", err) end
@@ -772,6 +828,37 @@ local function installHooks()
 		Hook.mode = "camera"
 	end
 
+	-- wall mode: perform_dual_cast's world Raycast (Exclude filter) is the only thing that can
+	-- stop a hit; the hitbox Spherecasts use Include filters with characters only. Null the world
+	-- ray for the duration of a wall shot and the head spherecast lands.
+	Hook.wallMode = "origin"
+	if hookmetamethod and getnamecallmethod and checkcaller then
+		local ok = pcall(function()
+			local fn = function(self, ...)
+				if Hook.wallShot and self == Workspace and not checkcaller() and getnamecallmethod() == "Raycast" then
+					local params = select(3, ...)
+					if typeof(params) == "RaycastParams" and params.FilterType == Enum.RaycastFilterType.Exclude then
+						return nil
+					end
+				end
+				return oldNamecall(self, ...)
+			end
+			oldNamecall = hookmetamethod(game, "__namecall", newcclosure and newcclosure(fn) or fn)
+		end)
+		if ok and oldNamecall then Hook.wallMode = "namecall" end
+	end
+
+	for _, t in ipairs(list) do
+		for _, sig in ipairs({ rawget(t, "kill_effect"), rawget(t, "dummy_kill_effect") }) do
+			if type(sig) == "table" then
+				local fn = function(victim) markKilled(victim) end
+				local ok, c = pcall(function() return sig:connect(fn) end)
+				if not ok then ok, c = pcall(function() return sig:Connect(fn) end) end
+				if ok and c then table.insert(Hook.signals, c) end
+			end
+		end
+	end
+
 	local wrapped = 0
 	for _, t in ipairs(list) do
 		local orig = rawget(t, "request_fire")
@@ -793,6 +880,11 @@ local function removeHooks()
 		pcall(function() t.request_fire = Hook.originals[i] end)
 	end
 	if oldIndex then pcall(hookmetamethod, game, "__index", oldIndex) end
+	if oldNamecall then pcall(hookmetamethod, game, "__namecall", oldNamecall) end
+	Hook.wallShot = false
+	for _, c in ipairs(Hook.signals) do
+		pcall(function() if c.Disconnect then c:Disconnect() elseif c.disconnect then c:disconnect() end end)
+	end
 	spoofCF, spoofCam = nil, nil
 end
 
@@ -846,7 +938,11 @@ local function updateAim(dt, now)
 	local t = Aim.target
 	if t and (not prev or prev.e ~= t.e) then
 		Aim.lockT = 0
-		if not prev then Aim.lineEnd = center end
+		if not prev then
+			Aim.growing, Aim.lineEnd = true, center
+		else
+			Aim.growing, Aim.lockT = false, 0.55  -- switch: slide the tip, quick reticle snap
+		end
 	end
 
 	Aim.lockLevel = approach(Aim.lockLevel, t and 1 or 0, 10, dt)
@@ -854,7 +950,8 @@ local function updateAim(dt, now)
 	Aim.spin = (Aim.spin + dt * (0.35 + 2.4 * Aim.lockLevel + 6 * Aim.shotT)) % (math.pi * 2)
 
 	local lock = Aim.lockLevel
-	local ringCol = CONFIG.FOVColor:Lerp(CONFIG.FOVLockColor, lock)
+	local lockCol = (t and t.occluded) and CONFIG.WallColor or CONFIG.FOVLockColor
+	local ringCol = CONFIG.FOVColor:Lerp(lockCol, lock)
 	local pulse = 0.5 + 0.5 * math.sin(now * (2.2 + 3 * lock))
 	local r = CONFIG.FOVRadius * (1 + 0.025 * pulse + 0.06 * Aim.shotT)
 
@@ -887,14 +984,23 @@ local function updateAim(dt, now)
 	if t then
 		local hs = Camera:WorldToViewportPoint(t.part.Position)
 		local head = Vector2.new(hs.X, hs.Y)
-		Aim.lockT = math.min(Aim.lockT + dt / 0.14, 1)
-		Aim.lineEnd = Aim.lineEnd and Aim.lineEnd:Lerp(head, 1 - math.exp(-30 * dt)) or head
-		-- once fully extended the line is glued to the head; the shot goes exactly here
-		local tip = Aim.lockT >= 1 and head or center:Lerp(Aim.lineEnd, easeOutBack(Aim.lockT))
-		if Aim.lockT >= 1 then Aim.lineEnd = head end
+		local tip
+		if Aim.growing then
+			Aim.lockT = math.min(Aim.lockT + dt / 0.08, 1)
+			tip = center:Lerp(head, easeOutBack(Aim.lockT))
+			if Aim.lockT >= 1 then Aim.growing, tip = false, head end
+			Aim.lineEnd = tip
+		else
+			Aim.lockT = math.min(Aim.lockT + dt / 0.06, 1)
+			Aim.lineEnd = (Aim.lineEnd or head):Lerp(head, 1 - math.exp(-75 * dt))
+			if (Aim.lineEnd - head).Magnitude < 1.5 then Aim.lineEnd = head end
+			tip = Aim.lineEnd
+		end
+		-- the shot always goes to the true head; the tip is glued there except mid-slide
 		if Aim.shotT > 0.6 then tip, Aim.lineEnd = head, head end
 
-		local lc = CONFIG.AimLineColor:Lerp(Color3.new(1, 1, 1), Aim.shotT * 0.8)
+		local baseLc = t.occluded and CONFIG.WallColor or CONFIG.AimLineColor
+		local lc = baseLc:Lerp(Color3.new(1, 1, 1), Aim.shotT * 0.8)
 		setLine(fov.lineOut, center, tip, CONFIG.OutlineColor, 0.8)
 		setLine(fov.line, center, tip, lc, 0.85 + 0.15 * pulse)
 		fov.line.Thickness = 2 + 2 * Aim.shotT
@@ -953,7 +1059,8 @@ local function hudText()
 	return string.format(
 		"esp  ·  box %s [%s]  ·  skel %s  ·  vis %s  ·  bots %s  ·  silent %s [%d]%s",
 		f(CONFIG.Box), CONFIG.BoxStyle:lower(), f(CONFIG.Skeleton), f(CONFIG.VisCheck), f(CONFIG.ShowBots),
-		f(CONFIG.SilentAim), CONFIG.FOVRadius, "  ·  " .. Hook.status)
+		f(CONFIG.SilentAim), CONFIG.FOVRadius,
+		(CONFIG.WallMode and ("  ·  WALLS [" .. Hook.wallMode .. "]") or "") .. "  ·  " .. Hook.status)
 end
 
 ------------------------------------------------------------------------ wiring
@@ -986,6 +1093,7 @@ table.insert(Connections, UserInputService.InputBegan:Connect(function(input, gp
 	elseif k == Enum.KeyCode.F4 then CONFIG.BoxStyle = CONFIG.BoxStyle == "Corner" and "Full" or "Corner"
 	elseif k == Enum.KeyCode.F5 then CONFIG.ShowBots = not CONFIG.ShowBots
 	elseif k == Enum.KeyCode.F6 then CONFIG.SilentAim = not CONFIG.SilentAim
+	elseif k == Enum.KeyCode.F7 then CONFIG.WallMode = not CONFIG.WallMode
 	elseif k == Enum.KeyCode.LeftBracket then CONFIG.FOVRadius = math.max(CONFIG.FOVMin, CONFIG.FOVRadius - 20)
 	elseif k == Enum.KeyCode.RightBracket then CONFIG.FOVRadius = math.min(CONFIG.FOVMax, CONFIG.FOVRadius + 20)
 	elseif k == Enum.KeyCode.End then getgenv().__MARA_ESP(); return
