@@ -1,3 +1,4 @@
 
 # built artifacts
 *.apk
+android-offsets/dump/
