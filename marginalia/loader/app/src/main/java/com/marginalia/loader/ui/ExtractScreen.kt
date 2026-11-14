@@ -45,7 +45,11 @@ fun ExtractScreen() {
     var currentStage by remember { mutableStateOf<Stage?>(null) }
     val fractions = remember { mutableStateMapOf<Stage, Float>() }
     var note by remember { mutableStateOf("") }
-    var result by remember { mutableStateOf<Pair<File, LibInfo?>?>(null) }
+    var parts by remember { mutableStateOf<List<File>>(emptyList()) }
+    var resultLib by remember { mutableStateOf<LibInfo?>(null) }
+    var done by remember { mutableStateOf(false) }
+    var libOnly by remember { mutableStateOf(true) }
+    var chunkMb by remember { mutableStateOf(28) }
     var error by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
@@ -84,7 +88,7 @@ fun ExtractScreen() {
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             items(filtered, key = { it.pkg }) { app ->
-                AppRow(app, app.pkg == selected?.pkg) { selected = app; result = null; error = null }
+                AppRow(app, app.pkg == selected?.pkg) { selected = app; parts = emptyList(); done = false; error = null }
             }
             item { Spacer(Modifier.height(140.dp)) }
         }
@@ -108,12 +112,14 @@ fun ExtractScreen() {
                         maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
 
-                    AnimatedVisibility(busy || result != null) {
+                    OptionsRow(libOnly, { libOnly = it }, chunkMb, { chunkMb = it }, enabled = !busy)
+
+                    AnimatedVisibility(busy || done) {
                         Column(Modifier.padding(top = 14.dp)) {
                             ExtractPipeline(
                                 current = currentStage,
                                 fractions = fractions,
-                                done = result != null,
+                                done = done,
                             )
                             if (busy) {
                                 Spacer(Modifier.height(10.dp))
@@ -123,9 +129,9 @@ fun ExtractScreen() {
                         }
                     }
 
-                    result?.let { (zip, lib) ->
+                    if (done && parts.isNotEmpty()) {
                         Spacer(Modifier.height(12.dp))
-                        ResultCard(zip, lib) { Share.send(context, listOf(zip), "Send bundle") }
+                        PartsCard(parts, resultLib) { Share.send(context, parts, "Send parts") }
                     }
 
                     error?.let {
@@ -137,17 +143,21 @@ fun ExtractScreen() {
                     Button(
                         onClick = {
                             if (busy) return@Button
-                            busy = true; note = "starting"; result = null; error = null
+                            busy = true; note = "starting"; parts = emptyList(); done = false; error = null
                             currentStage = null; fractions.clear()
+                            val cap = chunkMb.toLong() * 1024 * 1024
                             scope.launch(Dispatchers.Default) {
-                                Extractor.extract(context, app) { step ->
+                                Extractor.extract(context, app, cap, libOnly) { step ->
                                     when (step) {
                                         is Step.Progress -> {
                                             currentStage = step.stage
                                             fractions[step.stage] = step.stageFraction
                                             note = step.note
                                         }
-                                        is Step.Done -> { busy = false; result = step.zip to step.lib }
+                                        is Step.Done -> {
+                                            busy = false; done = true
+                                            parts = step.parts; resultLib = step.lib
+                                        }
                                         is Step.Failed -> { busy = false; error = step.reason }
                                     }
                                 }
@@ -158,7 +168,7 @@ fun ExtractScreen() {
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth().height(50.dp),
                     ) {
-                        Text(if (busy) "EXTRACTING…" else "EXTRACT BUNDLE TO ZIP", fontWeight = FontWeight.Black)
+                        Text(if (busy) "EXTRACTING…" else if (libOnly) "EXTRACT libroblox.so → PARTS" else "EXTRACT BUNDLE → PARTS", fontWeight = FontWeight.Black)
                     }
                 }
             }
@@ -197,22 +207,88 @@ private fun AppRow(app: AppEntry, sel: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ResultCard(zip: File, lib: LibInfo?, onShare: () -> Unit) {
-    Surface(color = Paper, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Good)) {
+private fun OptionsRow(
+    libOnly: Boolean, onLibOnly: (Boolean) -> Unit,
+    chunkMb: Int, onChunk: (Int) -> Unit, enabled: Boolean,
+) {
+    Column(Modifier.padding(top = 12.dp)) {
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Paper)
+                .clickable(enabled = enabled) { onLibOnly(!libOnly) }
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("libroblox.so only", color = TextHi, style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold)
+                Text(if (libOnly) "smallest — just what the dump needs" else "full split bundle (large)",
+                    color = TextDim, style = MaterialTheme.typography.labelSmall)
+            }
+            MiniToggle(libOnly) { onLibOnly(!libOnly) }
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("part size", color = TextDim, style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(end = 10.dp))
+            listOf(20, 25, 28).forEach { mb ->
+                val on = chunkMb == mb
+                Surface(
+                    color = if (on) Ink else Paper,
+                    shape = RoundedCornerShape(8.dp),
+                    border = if (on) null else CardBorder,
+                    onClick = { if (enabled) onChunk(mb) },
+                    modifier = Modifier.padding(end = 6.dp),
+                ) {
+                    Text("${mb}MB", color = if (on) Paper else TextDim,
+                        style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MiniToggle(on: Boolean, onTap: () -> Unit) {
+    val bg = if (on) Ink else SurfaceHi
+    Box(
+        Modifier.size(width = 40.dp, height = 23.dp).clip(RoundedCornerShape(50)).background(bg)
+            .clickable(onClick = onTap),
+        contentAlignment = if (on) Alignment.CenterEnd else Alignment.CenterStart,
+    ) {
+        Box(Modifier.padding(horizontal = 3.dp).size(17.dp).clip(RoundedCornerShape(50))
+            .background(if (on) Paper else TextDim))
+    }
+}
+
+@Composable
+private fun PartsCard(parts: List<File>, lib: LibInfo?, onShare: () -> Unit) {
+    val pieces = parts.filter { !it.name.endsWith(".parts.json") }
+    val manifest = parts.firstOrNull { it.name.endsWith(".parts.json") }
+    val stem = pieces.firstOrNull()?.name?.substringBeforeLast('.') ?: "payload"
+    val totalBytes = pieces.sumOf { it.length() }
+    Surface(color = Paper, shape = RoundedCornerShape(12.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Good)) {
         Column(Modifier.padding(14.dp)) {
-            Text("BUNDLE READY", color = Good, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black)
+            Text("READY — ${pieces.size} PART(S), ${human(totalBytes)}", color = Good,
+                style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black)
             Spacer(Modifier.height(6.dp))
-            Text(zip.name, color = TextHi, style = MaterialTheme.typography.bodyMedium, fontFamily = FontFamily.Monospace)
-            Text(human(zip.length()), color = TextDim, style = MaterialTheme.typography.labelSmall)
+            pieces.forEach {
+                Text("${it.name}  ·  ${human(it.length())}", color = TextHi,
+                    style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
             if (lib != null) {
                 Spacer(Modifier.height(8.dp))
-                Text(lib.entry, color = InkBright, style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace)
-                Text("sha256 ${lib.sha256}", color = TextDim, style = MaterialTheme.typography.labelSmall,
+                Text("libroblox.so sha256", color = InkBright, style = MaterialTheme.typography.labelSmall,
+                    fontFamily = FontFamily.Monospace)
+                Text(lib.sha256, color = TextDim, style = MaterialTheme.typography.labelSmall,
                     fontFamily = FontFamily.Monospace, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            } else {
-                Spacer(Modifier.height(6.dp))
-                Text("no libroblox.so in this bundle", color = Bad, style = MaterialTheme.typography.labelSmall)
             }
+            Spacer(Modifier.height(8.dp))
+            Text("reassemble:  cat $stem.* > $stem", color = TextDim,
+                style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace,
+                maxLines = 2, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(12.dp))
             OutlinedButton(
                 onClick = onShare,
@@ -221,7 +297,8 @@ private fun ResultCard(zip: File, lib: LibInfo?, onShare: () -> Unit) {
                 shape = RoundedCornerShape(10.dp),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Icon(Icons.Rounded.Share, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("SHARE / SEND", fontWeight = FontWeight.Bold)
+                Icon(Icons.Rounded.Share, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp))
+                Text("SHARE ALL PARTS", fontWeight = FontWeight.Bold)
             }
         }
     }
