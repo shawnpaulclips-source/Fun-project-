@@ -77,6 +77,10 @@ _SOCKET_RENAMES = ("Principled BSDF sockets renamed in 4.x/5.x: 'Specular' -> 'S
                    "'Emission' -> 'Emission Color', 'Transmission' -> 'Transmission Weight', "
                    "'Subsurface' -> 'Subsurface Weight', 'Sheen' -> 'Sheen Weight', 'Clearcoat' -> 'Coat Weight'")
 
+# operators that only make sense with a MESH active
+_MESH_OPS = (r"bpy\.ops\.(object\.(bake|modifier_apply|vertex_group_\w+|shade_\w+|parent_set|join)"
+             r"|mesh\.\w+|uv\.\w+)")
+
 # (kind, regex over "ExcType: message", likely_cause, suggested_fix). First match wins.
 ERROR_TABLE = [
     ("bpy_operator_context_active", r'is not a mesh|Object ".*" is not a (mesh|curve)|requires an active (mesh|object)',
@@ -171,16 +175,24 @@ def classify_error(exc, tb_text, state, preloaded=()):
             continue
         fmt.update({k: v for k, v in m.groupdict().items() if v is not None})
         if kind == "name_not_found":
-            key = fmt["key"] or msg.strip("'\"")
+            mk = re.search(r'key "([^"]*)"', msg)
+            key = mk.group(1) if mk else msg.strip("'\"")
             fmt["key"] = key
             pool = _all_names()
-            near = difflib.get_close_matches(key, pool, n=4, cutoff=0.55)
+            near = list(dict.fromkeys(difflib.get_close_matches(key, pool, n=6, cutoff=0.55)))[:4]
             fmt["where"] = "in bpy.data or on that node"
             fmt["close"] = (f"Close names: {near}. " if near else "") + _SOCKET_RENAMES
         elif kind == "api_attribute":
             fmt["close"] = _attr_suggestion(fmt["type"], fmt["attr"])
         elif kind == "bpy_operator_wrong_mode":
             mode = state.get("mode", "OBJECT")
+            if act is not None and act["type"] != "MESH" and op and re.match(_MESH_OPS, op):
+                # the canonical one: light_add/camera_add left a non-mesh active, then a mesh operator polls false
+                c_kind, _p, c_cause, c_fix = ERROR_TABLE[0]
+                return {"kind": c_kind, "message": msg[:600], "python_type": etype, "op": op,
+                        "likely_cause": f"{op} needs an active MESH; " + c_cause.format(**fmt)
+                        + " (adding a light or camera makes it active)",
+                        "suggested_fix": c_fix.format(**fmt)}
             if act is None:
                 fmt["poll_cause"] = f"{op or 'the operator'} needs an active object and there is none"
                 fmt["poll_fix"] = "bpy.context.view_layer.objects.active = bpy.data.objects['<name>'] then retry"
@@ -405,7 +417,11 @@ class Worker:
                 sc.cycles.use_adaptive_sampling = True
                 if not any(o.type == "LIGHT" for o in sc.objects):
                     size = max(bounds["size"]) if bounds else 1.0
-                    for L in RN.three_point(scale=max(size, 0.05) / 1.5):
+                    k = max(size, 0.05) / 1.5
+                    # three_point scales positions by k and energy by k; irradiance falls as 1/d^2,
+                    # so energy needs k^2 to light every object size the same. 0.5 keeps a
+                    # head-on 0.8-albedo face below clipping under AgX.
+                    for L in RN.three_point(key=2600 * k * 0.5, fill=700 * k * 0.5, rim=1500 * k * 0.5, scale=k):
                         temp_objs.append(L)
                         temp_data.append(L.data)
                 if sc.world is None:
@@ -752,7 +768,7 @@ class Registry:
         return s is not None
 
     def _reaper(self):
-        while not self._stop.wait(30):
+        while not self._stop.wait(max(0.5, min(30.0, IDLE_S / 2))):
             now = time.time()
             for s in list(self.sessions.values()):
                 if s.alive() and now - s.last_used > IDLE_S:

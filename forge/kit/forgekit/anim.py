@@ -1021,19 +1021,21 @@ def _glb_summary(path):
 
     anims = []
     for an in js.get("animations", []):
-        times, travel = 0.0, {}
+        t0, t1, travel = 1e9, 0.0, {}
         for ch in an["channels"]:
             smp = an["samplers"][ch["sampler"]]
             t = acc(smp["input"])
-            times = max(times, float(t.max()))
+            t0, t1 = min(t0, float(t.min())), max(t1, float(t.max()))
             if ch["target"]["path"] == "translation":
                 v = acc(smp["output"])
                 node = js["nodes"][ch["target"]["node"]].get("name", str(ch["target"]["node"]))
                 travel[node] = float(np.linalg.norm(v[-1] - v[0]))
         top = max(travel.items(), key=lambda kv: kv[1]) if travel else (None, 0.0)
         anims.append({"name": an.get("name"), "channels": len(an["channels"]),
-                      "duration_s": round(times, 4),
-                      "max_translation_travel": (top[0], round(top[1], 4))})
+                      "start_s": round(t0, 4), "duration_s": round(t1 - t0, 4),
+                      "max_translation_travel": (top[0], round(top[1], 4)),
+                      "hips_travel": {k: round(v, 4) for k, v in travel.items()
+                                      if k in ("DEF-spine", "DEF-hips", "DEF-pelvis", "hips", "pelvis")}})
     skins = js.get("skins", [])
     return {"animations": anims, "joints": len(skins[0]["joints"]) if skins else 0,
             "nodes": len(js.get("nodes", [])), "bytes": len(blob)}
@@ -1060,6 +1062,12 @@ def export_clip_gltf(rig, mesh, path, start=None, end=None, clip_name=None, fmt=
     if ad.action is not None:
         if clip_name:
             ad.action.name = clip_name
+        # a cycle carries a seam key at end+1; without a manual range the clip
+        # would include it and play the first pose twice per loop
+        if start is not None and end is not None:
+            ad.action.use_frame_range = True
+            ad.action.frame_start = start
+            ad.action.frame_end = end
         if getattr(ad, "action_slot", None) is None and ad.action.slots:
             ad.action_slot = ad.action.slots[0]
     for tr in ad.nla_tracks:
@@ -1088,6 +1096,7 @@ def export_clip_gltf(rig, mesh, path, start=None, end=None, clip_name=None, fmt=
         export_animation_mode="ACTIONS",
         export_force_sampling=True,
         export_frame_range=True,
+        export_anim_slide_to_zero=True,
     )
     out = {"path": path}
     if fmt.upper() == "GLB":

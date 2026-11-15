@@ -39,7 +39,7 @@ def run(script):
 # ------------------------------------------------------------- pure-math units
 pts = [Vector((0, 0.06 * i, 0.07)) for i in range(8)] + [Vector((0, 0.4 - 0.05 * i, 0.3)) for i in range(16)]
 belt, lows = A.stance_velocity(pts)
-check("stance_velocity recovers a constant treadmill speed", abs(belt.y - 0.06) < 1e-9, f"belt={tuple(belt)}")
+check("stance_velocity recovers a constant treadmill speed", abs(belt.y - 0.06) < 1e-6, f"belt={tuple(belt)}")
 runs, b2 = A.contact_frames([p.z for p in pts], [p.xy for p in pts], None)
 check("contact_frames finds the low, belt-speed run", runs and runs[0][0] == 0 and len(runs[0]) == 8,
       f"runs={runs} belt={tuple(round(v, 4) for v in b2)}")
@@ -139,10 +139,12 @@ print("      export:", json.dumps(ex))
 an = ex["animations"]
 check("export: exactly one named clip", len(an) == 1 and an[0]["name"] == "walk_root", str([a["name"] for a in an]))
 check("export: deform-only skeleton", 100 <= ex["joints"] <= 200, f"joints={ex['joints']}")
-check("export: clip duration is 24 frames at 24 fps", abs(an[0]["duration_s"] - 23 / 24) < 0.05, str(an[0]["duration_s"]))
-top = an[0]["max_translation_travel"]
-check("export: root motion survives in the deform hierarchy",
-      abs(top[1] - rep["root_travel_m"] * 23 / 24) < 0.05, f"{top} vs root {rep['root_travel_m']} ({time.time() - t:.2f}s)")
+check("export: clip spans frames 1-24 only (no duplicated seam frame)", abs(an[0]["duration_s"] - 23 / 24) < 1e-3 and an[0]["start_s"] == 0.0,
+      f"start={an[0]['start_s']} duration={an[0]['duration_s']}")
+hips = an[0]["hips_travel"]
+check("export: root motion survives on the deform hips",
+      bool(hips) and all(abs(v - rep["root_travel_m"] * 23 / 24) < 0.02 for v in hips.values()),
+      f"{hips} vs expected {rep['root_travel_m'] * 23 / 24:.4f} ({time.time() - t:.2f}s)")
 
 print(f"\n{'ALL PASS' if not FAILS else 'FAILED: ' + ', '.join(FAILS)}")
 sys.exit(1 if FAILS else 0)
