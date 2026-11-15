@@ -157,7 +157,7 @@ tracked = [A.deform_name(rig, b)
            for b in (B["foot_L"], B["foot_R"], B["head"], B["torso"]) if b]
 contacts = [A.deform_name(rig, b) for b in (B["foot_L"], B["foot_R"]) if b]
 print("measuring deform bones:", tracked)
-m = A.metrics(rig, tracked, 1, 24, contact_bones=contacts)
+m = A.metrics(rig, tracked, 1, 24, contact_bones=contacts, expected_root_speed="auto")
 for bone, vals in m.items():
     print(f"  {bone:16} " + "  ".join(f"{k}={v}" for k, v in vals.items()))
 rep = A.critique(m)
@@ -174,11 +174,10 @@ A.soften_handles(rig, factor=0.55)
 print("  ", A.decimate(rig, error=0.02))
 
 # A walk cycle authored in place has no root translation, so a planted foot
-# genuinely travels backwards relative to the root. Measure against the stride
-# the root WOULD cover rather than against zero.
-stride_per_frame = m[tracked[0]]["path_length_m"] / 24
-m2 = A.metrics(rig, tracked, 1, 24, contact_bones=contacts,
-               expected_root_speed=stride_per_frame)
+# genuinely travels relative to the root at the treadmill speed. "auto"
+# estimates that stance speed from the contact frames themselves. Do NOT use
+# path_length / 24: that averages the swing in and faked a 101 -> 64 mm gain.
+m2 = A.metrics(rig, tracked, 1, 24, contact_bones=contacts, expected_root_speed="auto")
 rep2 = A.critique(m2)
 print(f"SCORE {rep['score']} -> {rep2['score']}/100   "
       f"fails {len(rep['fails'])} -> {len(rep2['fails'])}   "

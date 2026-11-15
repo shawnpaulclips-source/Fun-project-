@@ -484,3 +484,52 @@ def export(mesh, rig, filepath, fmt="GLB", deform_only_bones=True):
             bake_anim_use_all_actions=False,
         )
     return filepath
+
+
+# --------------------------------------------------------------- leg chains
+_MECH_PREFIX = ("MCH-", "ORG-", "DEF-", "WGT-", "VIS_")
+
+
+def leg_chain(rig, foot_bone, tol=None):
+    """Resolve (thigh, shin, foot) control names for a foot control.
+
+    Works by geometry, not by name: the shin is the nearest non-mechanism
+    ancestor whose TAIL sits on the foot's head (the ankle), and the thigh is
+    the nearest non-mechanism ancestor of the shin whose tail sits on the
+    shin's head (the knee). On Rigify that walks
+        foot_fk.L -> MCH-foot_fk.L -> shin_fk.L -> thigh_fk.L
+    skipping the MCH- bone between foot and shin. On a plain armature it is
+    simply foot -> parent -> grandparent. Raises if the chain cannot be found.
+    """
+    bones = rig.data.bones
+    foot = bones.get(foot_bone)
+    if foot is None:
+        raise KeyError(f"no bone {foot_bone!r} on {rig.name}")
+    tol = tol or max(1e-4, foot.length * 0.05)
+
+    def ancestor_ending_at(b, point):
+        p = b.parent
+        while p is not None:
+            if not p.name.startswith(_MECH_PREFIX) and (p.tail_local - point).length <= tol:
+                return p
+            p = p.parent
+        return None
+
+    shin = ancestor_ending_at(foot, foot.head_local)
+    if shin is None:
+        raise RuntimeError(f"{foot_bone}: no ancestor ends at the ankle; pass chains= explicitly")
+    thigh = ancestor_ending_at(shin, shin.head_local)
+    if thigh is None:
+        raise RuntimeError(f"{shin.name}: no ancestor ends at the knee; pass chains= explicitly")
+    return thigh.name, shin.name, foot.name
+
+
+def root_bone(rig):
+    """The bone that carries root motion: 'root' if present, else the
+    parentless bone with the most descendants."""
+    if "root" in rig.data.bones:
+        return "root"
+    tops = [b for b in rig.data.bones if b.parent is None]
+    if not tops:
+        raise RuntimeError("armature has no bones")
+    return max(tops, key=lambda b: len(b.children_recursive)).name

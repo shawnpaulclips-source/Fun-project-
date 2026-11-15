@@ -346,14 +346,6 @@ def _normalize(v):
     return v / np.maximum(n, 1e-12), n
 
 
-def _rotate_min(v, a, b):
-    """Rotate v by the minimal rotation taking unit a onto unit b (batched)."""
-    c = (a * b).sum(-1, keepdims=True)
-    k = np.cross(a, b)
-    kv = np.cross(k, v)
-    return v * c + kv + k * (k * v).sum(-1, keepdims=True) / np.maximum(1.0 + c, 1e-6)
-
-
 def drive_from_root_accel(state, root_accel_world, chain_axes=None):
     """-root_accel projected perpendicular to each chain's axis, (C, 3).
 
@@ -874,13 +866,16 @@ def live_frame(rig, state, dt=None, root_accel=None):
 
 
 def bake(rig, chains, frame_start, frame_end, colliders=None, fps=None,
-         preset=None, root_accel=None, warmup_frames=0, clear_existing=False, **overrides):
+         preset=None, root_accel=None, warmup_frames=0, new_action=True, **overrides):
     """Simulate over a frame range and key the layered result.
 
     chains:   ChainSpec list, or bone-name list(s) with `preset`.
     colliders: ColliderSpec list; bone-attached ones follow their bone.
     root_accel: optional callable frame -> (3,) acceleration for in-place cycles.
     warmup_frames: settle the sim on the first frame's pose before baking.
+    new_action: key into a copy of the rig's action ("<name>_dyn") so the
+              animator's source action is never overwritten and can be re-baked.
+              The source stays in bpy.data; summary["source_action"] names it.
 
     Pass 1 records the animator pose (no writes), pass 2 simulates, pass 3
     keys. Returns {"frames", "keys", "ms_per_frame_sim", "ms_per_frame_total",
@@ -916,6 +911,7 @@ def bake(rig, chains, frame_start, frame_end, colliders=None, fps=None,
             col.append(_collider_world(c, M))
         rec.append((f, basis, mats, _pad(st, tg), col))
 
+    ad = rig.animation_data
     t_sim = 0.0
     results = []
     st.T[:] = rec[0][3]
@@ -936,6 +932,18 @@ def bake(rig, chains, frame_start, frame_end, colliders=None, fps=None,
         worst = max(worst, max_stretch(st))
         results.append((f, compute_layered(rig, st, mats, basis)))
 
+    src_name = None
+    ad = rig.animation_data
+    if new_action and ad and ad.action:
+        src = ad.action
+        src_name = src.name
+        slot = getattr(ad, "action_slot", None)
+        dst = src.copy()
+        dst.name = src.name + "_dyn"
+        ad.action = dst
+        if slot is not None and hasattr(ad, "action_slot") and len(getattr(dst, "slots", [])):
+            match = [sl for sl in dst.slots if sl.identifier == slot.identifier]
+            ad.action_slot = match[0] if match else dst.slots[0]
     keys = 0
     for f, q in results:
         for b, qv in q.items():
@@ -947,7 +955,9 @@ def bake(rig, chains, frame_start, frame_end, colliders=None, fps=None,
     return {"frames": n, "keys": keys,
             "ms_per_frame_sim": round(t_sim * 1000 / n, 4),
             "ms_per_frame_total": round((time.perf_counter() - t_all) * 1000 / n, 3),
-            "max_stretch": round(worst, 5), "bones": len(all_bones)}
+            "max_stretch": round(worst, 5), "bones": len(all_bones),
+            "source_action": src_name,
+            "action": ad.action.name if ad and ad.action else None}
 
 
 def export_vrm_springs(specs, colliders=()):
