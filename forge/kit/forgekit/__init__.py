@@ -9,8 +9,9 @@ Verified on Blender 5.3.0 / Python 3.13.18 / Linux / no GPU.
 
 Read README.md before writing anything. It contains the traps.
 """
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 __all__ = [
     "env", "mesh", "materials", "render", "inspect", "rig", "anim", "checkpoint",
     "hand", "formq", "fit", "dynamics", "ornament", "shading",
+    "bake", "detail", "compare", "server",
 ]
