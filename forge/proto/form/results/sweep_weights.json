@@ -1,0 +1,262 @@
+[
+ {
+  "jv_min": 0.6894,
+  "jv_mean": 0.7378,
+  "si_mean": 107.8,
+  "strain_max": 0.2256,
+  "scale": 0.35,
+  "asym": 0.0,
+  "shift": 0.0,
+  "mode": "lbs"
+ },
+ {
+  "jv_min": 0.7774,
+  "jv_mean": 0.8132,
+  "si_mean": 108.8,
+  "strain_max": 0.2251,
+  "scale": 0.35,
+  "asym": 0.0,
+  "shift": 0.0,
+  "mode": "dqs"
+ },
+ {
+  "jv_min": 0.6991,
+  "jv_mean": 0.742,
+  "si_mean": 71.6,
+  "strain_max": 0.282,
+  "scale": 0.35,
+  "asym": 0.0,
+  "shift": 0.5,
+  "mode": "lbs"
+ },
+ {
+  "jv_min": 0.7644,
+  "jv_mean": 0.8074,
+  "si_mean": 0.0,
+  "strain_max": 0.2565,
+  "scale": 0.35,
+  "asym": 0.0,
+  "shift": 0.5,
+  "mode": "dqs"
+ },
+ {
+  "jv_min": 0.6894,
+  "jv_mean": 0.7405,
+  "si_mean": 107.8,
+  "strain_max": 0.2171,
+  "scale": 0.35,
+  "asym": 0.5,
+  "shift": 0.0,
+  "mode": "lbs"
+ },
+ {
+  "jv_min": 0.7774,
+  "jv_mean": 0.8238,
+  "si_mean": 108.0,
+  "strain_max": 0.2274,
+  "scale": 0.35,
+  "asym": 0.5,
+  "shift": 0.0,
+  "mode": "dqs"
+ },
+ {
+  "jv_min": 0.6942,
+  "jv_mean": 0.7432,
+  "si_mean": 62.6,
+  "strain_max": 0.2915,
+  "scale": 0.35,
+  "asym": 0.5,
+  "shift": 0.5,
+  "mode": "lbs"
+ },
+ {
+  "jv_min": 0.7682,
+  "jv_mean": 0.8233,
+  "si_mean": 33.6,
+  "strain_max": 0.2816,
+  "scale": 0.35,
+  "asym": 0.5,
+  "shift": 0.5,
+  "mode": "dqs"
+ },
+ {
+  "jv_min": 0.6893,
+  "jv_mean": 0.742,
+  "si_mean": 107.6,
+  "strain_max": 0.2153,
+  "scale": 0.6,
+  "asym": 0.0,
+  "shift": 0.0,
+  "mode": "lbs"
+ },
+ {
+  "jv_min": 0.7782,
+  "jv_mean": 0.8293,
+  "si_mean": 108.0,
+  "strain_max": 0.2253,
+  "scale": 0.6,
+  "asym": 0.0,
+  "shift": 0.0,
+  "mode": "dqs"
+ },
+ {
+  "jv_min": 0.6969,
+  "jv_mean": 0.7417,
+  "si_mean": 61.0,
+  "strain_max": 0.2727,
+  "scale": 0.6,
+  "asym": 0.0,
+  "shift": 0.5,
+  "mode": "lbs"
+ },
+ {
+  "jv_min": 0.7894,
+  "jv_mean": 0.834,
+  "si_mean": 0.0,
+  "strain_max": 0.2335,
+  "scale": 0.6,
+  "asym": 0.0,
+  "shift": 0.5,
+  "mode": "dqs"
+ },
+ {
+  "jv_min": 0.676,
+  "jv_mean": 0.7351,
+  "si_mean": 108.4,
+  "strain_max": 0.2181,
+  "scale": 0.6,
+  "asym": 0.5,
+  "shift": 0.0,
+  "mode": "lbs"
+ },
+ {
+  "jv_min": 0.8111,
+  "jv_mean": 0.8524,
+  "si_mean": 108.6,
+  "strain_max": 0.2357,
+  "scale": 0.6,
+  "asym": 0.5,
+  "shift": 0.0,
+  "mode": "dqs"
+ },
+ {
+  "jv_min": 0.6893,
+  "jv_mean": 0.7415,
+  "si_mean": 65.0,
+  "strain_max": 0.2977,
+  "scale": 0.6,
+  "asym": 0.5,
+  "shift": 0.5,
+  "mode": "lbs"
+ },
+ {
+  "jv_min": 0.8037,
+  "jv_mean": 0.855,
+  "si_mean": 0.4,
+  "strain_max": 0.2833,
+  "scale": 0.6,
+  "asym": 0.5,
+  "shift": 0.5,
+  "mode": "dqs"
+ },
+ {
+  "jv_min": 0.6527,
+  "jv_mean": 0.7194,
+  "si_mean": 93.2,
+  "strain_max": 0.2207,
+  "scale": 1.0,
+  "asym": 0.0,
+  "shift": 0.0,
+  "mode": "lbs"
+ },
+ {
+  "jv_min": 0.8218,
+  "jv_mean": 0.8746,
+  "si_mean": 88.4,
+  "strain_max": 0.2445,
+  "scale": 1.0,
+  "asym": 0.0,
+  "shift": 0.0,
+  "mode": "dqs"
+ },
+ {
+  "jv_min": 0.6774,
+  "jv_mean": 0.7312,
+  "si_mean": 27.6,
+  "strain_max": 0.2953,
+  "scale": 1.0,
+  "asym": 0.0,
+  "shift": 0.5,
+  "mode": "lbs"
+ },
+ {
+  "jv_min": 0.8345,
+  "jv_mean": 0.8724,
+  "si_mean": 0.0,
+  "strain_max": 0.2525,
+  "scale": 1.0,
+  "asym": 0.0,
+  "shift": 0.5,
+  "mode": "dqs"
+ },
+ {
+  "jv_min": 0.6385,
+  "jv_mean": 0.7134,
+  "si_mean": 107.2,
+  "strain_max": 0.2102,
+  "scale": 1.0,
+  "asym": 0.5,
+  "shift": 0.0,
+  "mode": "lbs"
+ },
+ {
+  "jv_min": 0.837,
+  "jv_mean": 0.8877,
+  "si_mean": 106.8,
+  "strain_max": 0.2511,
+  "scale": 1.0,
+  "asym": 0.5,
+  "shift": 0.0,
+  "mode": "dqs"
+ },
+ {
+  "jv_min": 0.6672,
+  "jv_mean": 0.7251,
+  "si_mean": 58.6,
+  "strain_max": 0.2826,
+  "scale": 1.0,
+  "asym": 0.5,
+  "shift": 0.5,
+  "mode": "lbs"
+ },
+ {
+  "jv_min": 0.8381,
+  "jv_mean": 0.8875,
+  "si_mean": 0.0,
+  "strain_max": 0.2536,
+  "scale": 1.0,
+  "asym": 0.5,
+  "shift": 0.5,
+  "mode": "dqs"
+ },
+ {
+  "jv_min": 0.5063,
+  "jv_mean": 0.6361,
+  "si_mean": 122.0,
+  "strain_max": 0.2038,
+  "scale": 1.0,
+  "asym": 0,
+  "shift": 0,
+  "mode": "lbs_cs"
+ },
+ {
+  "jv_min": 0.6019,
+  "jv_mean": 0.7171,
+  "si_mean": 118.4,
+  "strain_max": 0.205,
+  "scale": 1.0,
+  "asym": 0,
+  "shift": 0,
+  "mode": "dqs_cs"
+ }
+]

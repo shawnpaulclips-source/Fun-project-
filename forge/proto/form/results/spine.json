@@ -1,0 +1,602 @@
+[
+ {
+  "bones": 1,
+  "bbone_segments": 1,
+  "anatomical": false,
+  "dqs": false,
+  "rest_curv_jump_p95": 3.0387,
+  "poses": {
+   "flex70": {
+    "back_dkappa_peak_ratio": 5.03,
+    "back_dkappa_max": 0.001,
+    "volume_ratio": 1.0,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.0,
+    "local_volume_min": 1.0,
+    "curv_jump_p95": 3.0384,
+    "normal_dev_p99": 23.175
+   },
+   "lateral40": {
+    "back_dkappa_peak_ratio": 3.493,
+    "back_dkappa_max": 0.001,
+    "volume_ratio": 1.0,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.0,
+    "local_volume_min": 1.0,
+    "curv_jump_p95": 3.0386,
+    "normal_dev_p99": 23.175
+   },
+   "twist60": {
+    "back_dkappa_peak_ratio": 2.935,
+    "back_dkappa_max": 4.248,
+    "volume_ratio": 1.0,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.0,
+    "local_volume_min": 1.0,
+    "curv_jump_p95": 3.039,
+    "normal_dev_p99": 23.175
+   },
+   "flex45_twist45": {
+    "back_dkappa_peak_ratio": 5.823,
+    "back_dkappa_max": 2.406,
+    "volume_ratio": 1.0,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.0,
+    "local_volume_min": 1.0,
+    "curv_jump_p95": 3.0386,
+    "normal_dev_p99": 23.175
+   }
+  },
+  "seconds": 0.36
+ },
+ {
+  "bones": 2,
+  "bbone_segments": 1,
+  "anatomical": false,
+  "dqs": false,
+  "rest_curv_jump_p95": 3.0388,
+  "poses": {
+   "flex70": {
+    "back_dkappa_peak_ratio": 2.923,
+    "back_dkappa_max": 6.283,
+    "volume_ratio": 0.9104,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.3895,
+    "local_volume_min": 0.7657,
+    "curv_jump_p95": 2.5023,
+    "normal_dev_p99": 23.175
+   },
+   "lateral40": {
+    "back_dkappa_peak_ratio": 3.026,
+    "back_dkappa_max": 4.809,
+    "volume_ratio": 0.9946,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.2007,
+    "local_volume_min": 0.9815,
+    "curv_jump_p95": 3.0621,
+    "normal_dev_p99": 23.175
+   },
+   "twist60": {
+    "back_dkappa_peak_ratio": 5.204,
+    "back_dkappa_max": 4.811,
+    "volume_ratio": 0.9767,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.1257,
+    "local_volume_min": 0.9314,
+    "curv_jump_p95": 3.0276,
+    "normal_dev_p99": 23.175
+   },
+   "flex45_twist45": {
+    "back_dkappa_peak_ratio": 3.883,
+    "back_dkappa_max": 5.231,
+    "volume_ratio": 0.9333,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.2125,
+    "local_volume_min": 0.8275,
+    "curv_jump_p95": 2.6863,
+    "normal_dev_p99": 23.175
+   }
+  },
+  "seconds": 0.36
+ },
+ {
+  "bones": 3,
+  "bbone_segments": 1,
+  "anatomical": false,
+  "dqs": false,
+  "rest_curv_jump_p95": 3.0387,
+  "poses": {
+   "flex70": {
+    "back_dkappa_peak_ratio": 1.985,
+    "back_dkappa_max": 5.23,
+    "volume_ratio": 0.8958,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.4167,
+    "local_volume_min": 0.8379,
+    "curv_jump_p95": 2.5215,
+    "normal_dev_p99": 23.175
+   },
+   "lateral40": {
+    "back_dkappa_peak_ratio": 2.668,
+    "back_dkappa_max": 5.175,
+    "volume_ratio": 0.9968,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.2181,
+    "local_volume_min": 0.9917,
+    "curv_jump_p95": 3.0505,
+    "normal_dev_p99": 23.175
+   },
+   "twist60": {
+    "back_dkappa_peak_ratio": 5.406,
+    "back_dkappa_max": 3.674,
+    "volume_ratio": 0.9862,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.1328,
+    "local_volume_min": 0.9726,
+    "curv_jump_p95": 3.0618,
+    "normal_dev_p99": 23.175
+   },
+   "flex45_twist45": {
+    "back_dkappa_peak_ratio": 2.345,
+    "back_dkappa_max": 3.715,
+    "volume_ratio": 0.9275,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.2267,
+    "local_volume_min": 0.8876,
+    "curv_jump_p95": 2.7485,
+    "normal_dev_p99": 23.175
+   }
+  },
+  "seconds": 0.36
+ },
+ {
+  "bones": 5,
+  "bbone_segments": 1,
+  "anatomical": false,
+  "dqs": false,
+  "rest_curv_jump_p95": 3.0388,
+  "poses": {
+   "flex70": {
+    "back_dkappa_peak_ratio": 1.809,
+    "back_dkappa_max": 4.549,
+    "volume_ratio": 0.8799,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.399,
+    "local_volume_min": 0.8614,
+    "curv_jump_p95": 2.509,
+    "normal_dev_p99": 23.175
+   },
+   "lateral40": {
+    "back_dkappa_peak_ratio": 1.469,
+    "back_dkappa_max": 2.56,
+    "volume_ratio": 0.9985,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.2146,
+    "local_volume_min": 0.9994,
+    "curv_jump_p95": 3.1185,
+    "normal_dev_p99": 23.175
+   },
+   "twist60": {
+    "back_dkappa_peak_ratio": 3.795,
+    "back_dkappa_max": 2.156,
+    "volume_ratio": 0.9936,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.1211,
+    "local_volume_min": 0.9923,
+    "curv_jump_p95": 3.0414,
+    "normal_dev_p99": 23.175
+   },
+   "flex45_twist45": {
+    "back_dkappa_peak_ratio": 2.243,
+    "back_dkappa_max": 3.428,
+    "volume_ratio": 0.9202,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.2163,
+    "local_volume_min": 0.9057,
+    "curv_jump_p95": 2.7286,
+    "normal_dev_p99": 23.175
+   }
+  },
+  "seconds": 0.32
+ },
+ {
+  "bones": 8,
+  "bbone_segments": 1,
+  "anatomical": false,
+  "dqs": false,
+  "rest_curv_jump_p95": 3.0387,
+  "poses": {
+   "flex70": {
+    "back_dkappa_peak_ratio": 1.958,
+    "back_dkappa_max": 4.496,
+    "volume_ratio": 0.8715,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.3992,
+    "local_volume_min": 0.856,
+    "curv_jump_p95": 2.606,
+    "normal_dev_p99": 23.175
+   },
+   "lateral40": {
+    "back_dkappa_peak_ratio": 1.676,
+    "back_dkappa_max": 2.532,
+    "volume_ratio": 0.9993,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.2165,
+    "local_volume_min": 0.9996,
+    "curv_jump_p95": 3.1075,
+    "normal_dev_p99": 23.175
+   },
+   "twist60": {
+    "back_dkappa_peak_ratio": 6.061,
+    "back_dkappa_max": 2.673,
+    "volume_ratio": 0.997,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.1028,
+    "local_volume_min": 0.9966,
+    "curv_jump_p95": 3.0017,
+    "normal_dev_p99": 23.175
+   },
+   "flex45_twist45": {
+    "back_dkappa_peak_ratio": 2.269,
+    "back_dkappa_max": 3.261,
+    "volume_ratio": 0.9161,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.2154,
+    "local_volume_min": 0.9053,
+    "curv_jump_p95": 2.825,
+    "normal_dev_p99": 23.175
+   }
+  },
+  "seconds": 0.3
+ },
+ {
+  "bones": 17,
+  "bbone_segments": 1,
+  "anatomical": false,
+  "dqs": false,
+  "rest_curv_jump_p95": 3.0387,
+  "poses": {
+   "flex70": {
+    "back_dkappa_peak_ratio": 1.727,
+    "back_dkappa_max": 3.392,
+    "volume_ratio": 0.8627,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.4012,
+    "local_volume_min": 0.8618,
+    "curv_jump_p95": 2.602,
+    "normal_dev_p99": 23.114
+   },
+   "lateral40": {
+    "back_dkappa_peak_ratio": 1.789,
+    "back_dkappa_max": 2.13,
+    "volume_ratio": 0.9997,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.2176,
+    "local_volume_min": 1.0002,
+    "curv_jump_p95": 3.0098,
+    "normal_dev_p99": 23.146
+   },
+   "twist60": {
+    "back_dkappa_peak_ratio": 2.731,
+    "back_dkappa_max": 0.888,
+    "volume_ratio": 0.9988,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.0954,
+    "local_volume_min": 0.9985,
+    "curv_jump_p95": 3.0725,
+    "normal_dev_p99": 23.603
+   },
+   "flex45_twist45": {
+    "back_dkappa_peak_ratio": 1.972,
+    "back_dkappa_max": 2.302,
+    "volume_ratio": 0.9112,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.2145,
+    "local_volume_min": 0.9092,
+    "curv_jump_p95": 2.8334,
+    "normal_dev_p99": 23.309
+   }
+  },
+  "seconds": 0.34
+ },
+ {
+  "bones": 3,
+  "bbone_segments": 8,
+  "anatomical": false,
+  "dqs": false,
+  "rest_curv_jump_p95": 3.0388,
+  "poses": {
+   "flex70": {
+    "back_dkappa_peak_ratio": 2.598,
+    "back_dkappa_max": 4.514,
+    "volume_ratio": 0.9006,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.5786,
+    "local_volume_min": 0.8672,
+    "curv_jump_p95": 2.6767,
+    "normal_dev_p99": 22.547
+   },
+   "lateral40": {
+    "back_dkappa_peak_ratio": 2.251,
+    "back_dkappa_max": 2.464,
+    "volume_ratio": 1.001,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.2742,
+    "local_volume_min": 1.0013,
+    "curv_jump_p95": 3.0199,
+    "normal_dev_p99": 23.624
+   },
+   "twist60": {
+    "back_dkappa_peak_ratio": 4.117,
+    "back_dkappa_max": 3.165,
+    "volume_ratio": 1.001,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.2147,
+    "local_volume_min": 0.9928,
+    "curv_jump_p95": 3.0698,
+    "normal_dev_p99": 23.539
+   },
+   "flex45_twist45": {
+    "back_dkappa_peak_ratio": 3.115,
+    "back_dkappa_max": 3.356,
+    "volume_ratio": 0.9355,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.3652,
+    "local_volume_min": 0.9103,
+    "curv_jump_p95": 2.8867,
+    "normal_dev_p99": 22.774
+   }
+  },
+  "seconds": 0.38
+ },
+ {
+  "bones": 5,
+  "bbone_segments": 6,
+  "anatomical": false,
+  "dqs": false,
+  "rest_curv_jump_p95": 3.0388,
+  "poses": {
+   "flex70": {
+    "back_dkappa_peak_ratio": 1.804,
+    "back_dkappa_max": 3.442,
+    "volume_ratio": 0.8779,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.5355,
+    "local_volume_min": 0.853,
+    "curv_jump_p95": 2.6551,
+    "normal_dev_p99": 22.881
+   },
+   "lateral40": {
+    "back_dkappa_peak_ratio": 1.724,
+    "back_dkappa_max": 1.968,
+    "volume_ratio": 1.0003,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.2669,
+    "local_volume_min": 1.0017,
+    "curv_jump_p95": 3.0322,
+    "normal_dev_p99": 23.541
+   },
+   "twist60": {
+    "back_dkappa_peak_ratio": 4.333,
+    "back_dkappa_max": 3.18,
+    "volume_ratio": 0.9996,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.2097,
+    "local_volume_min": 0.9948,
+    "curv_jump_p95": 3.0636,
+    "normal_dev_p99": 23.26
+   },
+   "flex45_twist45": {
+    "back_dkappa_peak_ratio": 2.105,
+    "back_dkappa_max": 2.338,
+    "volume_ratio": 0.9208,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.299,
+    "local_volume_min": 0.9019,
+    "curv_jump_p95": 2.9023,
+    "normal_dev_p99": 22.924
+   }
+  },
+  "seconds": 0.4
+ },
+ {
+  "bones": 5,
+  "bbone_segments": 1,
+  "anatomical": true,
+  "dqs": false,
+  "rest_curv_jump_p95": 3.0388,
+  "poses": {
+   "flex70": {
+    "back_dkappa_peak_ratio": 2.589,
+    "back_dkappa_max": 5.683,
+    "volume_ratio": 0.9089,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.4054,
+    "local_volume_min": 0.8851,
+    "curv_jump_p95": 2.7167,
+    "normal_dev_p99": 23.175
+   },
+   "lateral40": {
+    "back_dkappa_peak_ratio": 1.55,
+    "back_dkappa_max": 2.716,
+    "volume_ratio": 0.9985,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.2321,
+    "local_volume_min": 0.9993,
+    "curv_jump_p95": 3.1198,
+    "normal_dev_p99": 23.175
+   },
+   "twist60": {
+    "back_dkappa_peak_ratio": 3.414,
+    "back_dkappa_max": 1.979,
+    "volume_ratio": 0.991,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.1552,
+    "local_volume_min": 0.9813,
+    "curv_jump_p95": 3.0004,
+    "normal_dev_p99": 23.175
+   },
+   "flex45_twist45": {
+    "back_dkappa_peak_ratio": 2.773,
+    "back_dkappa_max": 3.877,
+    "volume_ratio": 0.9373,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.2544,
+    "local_volume_min": 0.9156,
+    "curv_jump_p95": 2.8492,
+    "normal_dev_p99": 23.175
+   }
+  },
+  "seconds": 0.34
+ },
+ {
+  "bones": 5,
+  "bbone_segments": 6,
+  "anatomical": true,
+  "dqs": false,
+  "rest_curv_jump_p95": 3.0388,
+  "poses": {
+   "flex70": {
+    "back_dkappa_peak_ratio": 2.87,
+    "back_dkappa_max": 4.777,
+    "volume_ratio": 0.9048,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.5145,
+    "local_volume_min": 0.8901,
+    "curv_jump_p95": 2.9557,
+    "normal_dev_p99": 22.68
+   },
+   "lateral40": {
+    "back_dkappa_peak_ratio": 1.875,
+    "back_dkappa_max": 2.146,
+    "volume_ratio": 1.0003,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.2842,
+    "local_volume_min": 1.0017,
+    "curv_jump_p95": 3.054,
+    "normal_dev_p99": 23.51
+   },
+   "twist60": {
+    "back_dkappa_peak_ratio": 4.031,
+    "back_dkappa_max": 2.958,
+    "volume_ratio": 0.9996,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.2491,
+    "local_volume_min": 0.9943,
+    "curv_jump_p95": 3.0026,
+    "normal_dev_p99": 23.239
+   },
+   "flex45_twist45": {
+    "back_dkappa_peak_ratio": 3.061,
+    "back_dkappa_max": 3.449,
+    "volume_ratio": 0.9383,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.2703,
+    "local_volume_min": 0.9248,
+    "curv_jump_p95": 2.9527,
+    "normal_dev_p99": 22.901
+   }
+  },
+  "seconds": 0.37
+ },
+ {
+  "bones": 5,
+  "bbone_segments": 6,
+  "anatomical": true,
+  "dqs": true,
+  "rest_curv_jump_p95": 3.0389,
+  "poses": {
+   "flex70": {
+    "back_dkappa_peak_ratio": 2.864,
+    "back_dkappa_max": 4.79,
+    "volume_ratio": 0.905,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.5148,
+    "local_volume_min": 0.8905,
+    "curv_jump_p95": 2.9543,
+    "normal_dev_p99": 22.675
+   },
+   "lateral40": {
+    "back_dkappa_peak_ratio": 1.875,
+    "back_dkappa_max": 2.146,
+    "volume_ratio": 1.0005,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.2843,
+    "local_volume_min": 1.0018,
+    "curv_jump_p95": 3.0538,
+    "normal_dev_p99": 23.509
+   },
+   "twist60": {
+    "back_dkappa_peak_ratio": 4.034,
+    "back_dkappa_max": 2.968,
+    "volume_ratio": 1.0005,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.2494,
+    "local_volume_min": 0.9953,
+    "curv_jump_p95": 3.0003,
+    "normal_dev_p99": 23.236
+   },
+   "flex45_twist45": {
+    "back_dkappa_peak_ratio": 3.108,
+    "back_dkappa_max": 3.52,
+    "volume_ratio": 0.9388,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.2701,
+    "local_volume_min": 0.9254,
+    "curv_jump_p95": 2.9614,
+    "normal_dev_p99": 22.899
+   }
+  },
+  "seconds": 0.34
+ },
+ {
+  "bones": 8,
+  "bbone_segments": 1,
+  "anatomical": false,
+  "dqs": true,
+  "rest_curv_jump_p95": 3.0388,
+  "poses": {
+   "flex70": {
+    "back_dkappa_peak_ratio": 1.945,
+    "back_dkappa_max": 4.646,
+    "volume_ratio": 0.8727,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.401,
+    "local_volume_min": 0.857,
+    "curv_jump_p95": 2.6613,
+    "normal_dev_p99": 23.175
+   },
+   "lateral40": {
+    "back_dkappa_peak_ratio": 1.673,
+    "back_dkappa_max": 2.53,
+    "volume_ratio": 0.9999,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.2166,
+    "local_volume_min": 1.0002,
+    "curv_jump_p95": 3.1018,
+    "normal_dev_p99": 23.175
+   },
+   "twist60": {
+    "back_dkappa_peak_ratio": 6.093,
+    "back_dkappa_max": 2.766,
+    "volume_ratio": 0.9995,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.1033,
+    "local_volume_min": 0.9992,
+    "curv_jump_p95": 3.0001,
+    "normal_dev_p99": 23.175
+   },
+   "flex45_twist45": {
+    "back_dkappa_peak_ratio": 2.217,
+    "back_dkappa_max": 3.357,
+    "volume_ratio": 0.918,
+    "self_intersections": 0,
+    "edge_strain_p99": 0.2151,
+    "local_volume_min": 0.907,
+    "curv_jump_p95": 2.8378,
+    "normal_dev_p99": 23.175
+   }
+  },
+  "seconds": 0.34
+ }
+]

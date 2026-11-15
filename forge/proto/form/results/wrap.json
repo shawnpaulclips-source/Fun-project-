@@ -1,0 +1,71 @@
+[
+ {
+  "method": "default kit hand, no wrap",
+  "skin_to_blob_mean_mm": 3.243,
+  "skin_to_blob_p99_mm": 15.4,
+  "blob_to_skin_mean_mm": 4.633,
+  "blob_to_skin_p99_mm": 22.372,
+  "flipped_vs_target_frac": 0.0328,
+  "cage_quad_angle_dev_p95": 41.13,
+  "cage_poles": 76
+ },
+ {
+  "method": "naive: shrinkwrap cage (nearest surface point)",
+  "skin_to_blob_mean_mm": 1.031,
+  "skin_to_blob_p99_mm": 6.263,
+  "blob_to_skin_mean_mm": 3.299,
+  "blob_to_skin_p99_mm": 21.998,
+  "flipped_vs_target_frac": 0.032,
+  "cage_quad_angle_dev_p95": 41.13,
+  "cage_poles": 76
+ },
+ {
+  "method": "prior: CMA-ES param fit (chamfer)",
+  "skin_to_blob_mean_mm": 1.424,
+  "skin_to_blob_p99_mm": 7.655,
+  "blob_to_skin_mean_mm": 2.115,
+  "blob_to_skin_p99_mm": 11.745,
+  "flipped_vs_target_frac": 0.0034,
+  "cage_quad_angle_dev_p95": 40.46,
+  "cage_poles": 76,
+  "evals": 243,
+  "seconds": 10.3,
+  "fitted": {
+   "scale": 1.06,
+   "width_scale": 1.1342,
+   "thumb_abduct": 54.2318,
+   "finger_len": 1.0113,
+   "spread_mult": 1.5461,
+   "breadth": 1.109
+  },
+  "hidden": {
+   "scale": 1.05,
+   "width_scale": 1.12,
+   "thumb_abduct": 55.0,
+   "finger_len": 0.93,
+   "spread_mult": 2.0,
+   "breadth": 1.06
+  }
+ },
+ {
+  "method": "prior + limit-surface residual fit x6 + relax",
+  "skin_to_blob_mean_mm": 0.301,
+  "skin_to_blob_p99_mm": 4.261,
+  "blob_to_skin_mean_mm": 0.832,
+  "blob_to_skin_p99_mm": 7.608,
+  "flipped_vs_target_frac": 0.0,
+  "cage_quad_angle_dev_p95": 29.77,
+  "cage_poles": 76,
+  "seconds": 0.08,
+  "cage_vs_limit_index_check_mm": 7.81
+ },
+ {
+  "method": "wrapped mesh + transferred rig: 12 finger joints at 90 deg",
+  "joint_volume_min": 0.4497,
+  "joint_volume_mean": 0.7382,
+  "self_intersections_mean": 0.0
+ },
+ {
+  "total_s": 12.0
+ }
+]

@@ -1,0 +1,456 @@
+{
+ "arm": "kit_fit",
+ "score": 83.8,
+ "subscores": {
+  "quad_frac": 6.0,
+  "pole_frac": 6.0,
+  "quad_angle_dev_p95": 2.06,
+  "normal_dev_p99": 1.43,
+  "curv_jump_p95": 6.98,
+  "zebra_jump_p95": 7.33,
+  "knuckle_isect_mean": 10.0,
+  "full_curl_isect": 3.52,
+  "curl_joint_vol_min": 12.64,
+  "curl_vol_ratio_min": 5.0,
+  "curl_strain_p99_max": 6.0,
+  "twist_vol_min": 8.0,
+  "proportion_err": 8.0,
+  "pose_battery_isect": 0.0,
+  "pose_crease_gain": 5.84
+ },
+ "flat": {
+  "quad_frac": 1.0,
+  "pole_frac": 0.0057,
+  "quad_angle_dev_p95": 24.42,
+  "normal_dev_p99": 21.25,
+  "curv_jump_p95": 1.8956,
+  "zebra_jump_p95": 1.5866,
+  "knuckle_isect_mean": 0.0,
+  "full_curl_isect": 626,
+  "curl_joint_vol_min": 0.8841,
+  "curl_vol_ratio_min": 0.9953,
+  "curl_strain_p99_max": 0.3237,
+  "twist_vol_min": 0.9361,
+  "proportion_err": 0.0037,
+  "pose_battery_isect": 655.0,
+  "pose_crease_gain": 2.4658333333333324
+ },
+ "topology_cage": {
+  "verts": 838,
+  "faces": 836,
+  "quad_frac": 1.0,
+  "tri_frac": 0.0,
+  "ngons": 0,
+  "valence_hist": {
+   "3": 42,
+   "4": 762,
+   "5": 34
+  },
+  "poles": 76,
+  "pole_frac": 0.0907,
+  "quad_angle_dev_mean": 6.56,
+  "quad_angle_dev_p95": 41.13,
+  "edge_len_cv": 0.9626,
+  "non_manifold_edges": 0,
+  "boundary_verts": 0
+ },
+ "topology": {
+  "verts": 13378,
+  "faces": 13376,
+  "quad_frac": 1.0,
+  "tri_frac": 0.0,
+  "ngons": 0,
+  "valence_hist": {
+   "3": 42,
+   "4": 13302,
+   "5": 34
+  },
+  "poles": 76,
+  "pole_frac": 0.0057,
+  "quad_angle_dev_mean": 5.06,
+  "quad_angle_dev_p95": 24.42,
+  "edge_len_cv": 0.9614,
+  "non_manifold_edges": 0,
+  "boundary_verts": 0
+ },
+ "smoothness": {
+  "normal_dev_p50": 1.22,
+  "normal_dev_p95": 13.202,
+  "normal_dev_p99": 21.25,
+  "curv_jump_p50": 0.0832,
+  "curv_jump_p95": 1.8956,
+  "zebra_jump_p50": 0.0769,
+  "zebra_jump_p95": 1.5866,
+  "tris": 26752
+ },
+ "roll_correct": "19/19",
+ "per_joint_90": {
+  "index_MCP": {
+   "joint_volume": 0.9203,
+   "self_intersections": 0,
+   "volume_ratio": 0.999,
+   "edge_strain_p99": 0.2039,
+   "collapsed_faces": 0
+  },
+  "index_PIP": {
+   "joint_volume": 0.8933,
+   "self_intersections": 0,
+   "volume_ratio": 0.9994,
+   "edge_strain_p99": 0.1998,
+   "collapsed_faces": 0
+  },
+  "index_DIP": {
+   "joint_volume": 0.8961,
+   "self_intersections": 0,
+   "volume_ratio": 0.9996,
+   "edge_strain_p99": 0.2695,
+   "collapsed_faces": 0
+  },
+  "middle_MCP": {
+   "joint_volume": 1.0008,
+   "self_intersections": 0,
+   "volume_ratio": 0.9999,
+   "edge_strain_p99": 0.2422,
+   "collapsed_faces": 0
+  },
+  "middle_PIP": {
+   "joint_volume": 0.8883,
+   "self_intersections": 0,
+   "volume_ratio": 0.9993,
+   "edge_strain_p99": 0.1684,
+   "collapsed_faces": 0
+  },
+  "middle_DIP": {
+   "joint_volume": 0.8872,
+   "self_intersections": 0,
+   "volume_ratio": 0.9995,
+   "edge_strain_p99": 0.2433,
+   "collapsed_faces": 0
+  },
+  "ring_MCP": {
+   "joint_volume": 0.9202,
+   "self_intersections": 0,
+   "volume_ratio": 0.999,
+   "edge_strain_p99": 0.2191,
+   "collapsed_faces": 0
+  },
+  "ring_PIP": {
+   "joint_volume": 0.8844,
+   "self_intersections": 0,
+   "volume_ratio": 0.9995,
+   "edge_strain_p99": 0.1647,
+   "collapsed_faces": 0
+  },
+  "ring_DIP": {
+   "joint_volume": 0.8879,
+   "self_intersections": 0,
+   "volume_ratio": 0.9996,
+   "edge_strain_p99": 0.2373,
+   "collapsed_faces": 0
+  },
+  "little_MCP": {
+   "joint_volume": 1.02,
+   "self_intersections": 0,
+   "volume_ratio": 0.9997,
+   "edge_strain_p99": 0.2033,
+   "collapsed_faces": 0
+  },
+  "little_PIP": {
+   "joint_volume": 0.8974,
+   "self_intersections": 0,
+   "volume_ratio": 0.9996,
+   "edge_strain_p99": 0.1958,
+   "collapsed_faces": 0
+  },
+  "little_DIP": {
+   "joint_volume": 0.8912,
+   "self_intersections": 0,
+   "volume_ratio": 0.9997,
+   "edge_strain_p99": 0.2492,
+   "collapsed_faces": 0
+  },
+  "thumb_MCP": {
+   "joint_volume": 0.9923,
+   "self_intersections": 0,
+   "volume_ratio": 0.9953,
+   "edge_strain_p99": 0.3237,
+   "collapsed_faces": 0
+  },
+  "thumb_IP": {
+   "joint_volume": 0.8841,
+   "self_intersections": 0,
+   "volume_ratio": 0.999,
+   "edge_strain_p99": 0.2509,
+   "collapsed_faces": 0
+  }
+ },
+ "curl_all": {
+  "volume_ratio": 0.9919,
+  "self_intersections": 626,
+  "edge_strain_p99": 0.6313,
+  "collapsed_faces": 0,
+  "joint_volume": {
+   "index_MCP": 1.0898,
+   "index_PIP": 0.8947,
+   "index_DIP": 0.8985,
+   "middle_MCP": 1.0151,
+   "middle_PIP": 0.8885,
+   "middle_DIP": 0.8879,
+   "ring_MCP": 0.8947,
+   "ring_PIP": 0.8846,
+   "ring_DIP": 0.8884,
+   "little_MCP": 0.9942,
+   "little_PIP": 0.8987,
+   "little_DIP": 0.8936,
+   "thumb_MCP": 1.0203,
+   "thumb_IP": 0.9522,
+   "wrist": 1.0,
+   "forearm_mid": 1.0
+  },
+  "joint_volume_min": 0.8846
+ },
+ "poses": {
+  "open": {
+   "volume_ratio": 1.007,
+   "self_intersections": 0,
+   "edge_strain_p99": 0.13,
+   "collapsed_faces": 0,
+   "joint_volume": {
+    "index_MCP": 1.283,
+    "index_PIP": 1.0,
+    "index_DIP": 1.0,
+    "middle_MCP": 0.996,
+    "middle_PIP": 1.0,
+    "middle_DIP": 1.0,
+    "ring_MCP": 0.9879,
+    "ring_PIP": 1.0,
+    "ring_DIP": 1.0,
+    "little_MCP": 0.9794,
+    "little_PIP": 1.0,
+    "little_DIP": 1.0,
+    "thumb_MCP": 1.0073,
+    "thumb_IP": 1.0,
+    "wrist": 0.9975,
+    "forearm_mid": 1.0
+   },
+   "joint_volume_min": 0.9794,
+   "normal_dev_p99": 20.795,
+   "curv_jump_p95": 1.8401
+  },
+  "relaxed": {
+   "volume_ratio": 0.994,
+   "self_intersections": 18,
+   "edge_strain_p99": 0.2701,
+   "collapsed_faces": 32,
+   "joint_volume": {
+    "index_MCP": 0.888,
+    "index_PIP": 0.9964,
+    "index_DIP": 0.9977,
+    "middle_MCP": 1.1437,
+    "middle_PIP": 0.9899,
+    "middle_DIP": 0.9968,
+    "ring_MCP": 1.2113,
+    "ring_PIP": 0.9822,
+    "ring_DIP": 0.9964,
+    "little_MCP": 1.2449,
+    "little_PIP": 0.98,
+    "little_DIP": 0.9938,
+    "thumb_MCP": 1.0087,
+    "thumb_IP": 0.9993,
+    "wrist": 1.0007,
+    "forearm_mid": 1.0
+   },
+   "joint_volume_min": 0.888,
+   "normal_dev_p99": 22.984,
+   "curv_jump_p95": 2.1995
+  },
+  "fist": {
+   "volume_ratio": 0.9767,
+   "self_intersections": 1546,
+   "edge_strain_p99": 0.6383,
+   "collapsed_faces": 87,
+   "joint_volume": {
+    "index_MCP": 0.9698,
+    "index_PIP": 0.8657,
+    "index_DIP": 0.9493,
+    "middle_MCP": 0.9541,
+    "middle_PIP": 0.8524,
+    "middle_DIP": 0.9418,
+    "ring_MCP": 0.8857,
+    "ring_PIP": 0.8478,
+    "ring_DIP": 0.946,
+    "little_MCP": 1.0047,
+    "little_PIP": 0.87,
+    "little_DIP": 0.9547,
+    "thumb_MCP": 1.0536,
+    "thumb_IP": 0.9855,
+    "wrist": 1.0024,
+    "forearm_mid": 1.0
+   },
+   "joint_volume_min": 0.8478,
+   "normal_dev_p99": 26.444,
+   "curv_jump_p95": 2.8548
+  },
+  "point": {
+   "volume_ratio": 0.9775,
+   "self_intersections": 1118,
+   "edge_strain_p99": 0.6041,
+   "collapsed_faces": 55,
+   "joint_volume": {
+    "index_MCP": 0.4814,
+    "index_PIP": 1.0,
+    "index_DIP": 1.0,
+    "middle_MCP": 0.9578,
+    "middle_PIP": 0.8524,
+    "middle_DIP": 0.9418,
+    "ring_MCP": 0.8857,
+    "ring_PIP": 0.8478,
+    "ring_DIP": 0.946,
+    "little_MCP": 1.0047,
+    "little_PIP": 0.87,
+    "little_DIP": 0.9547,
+    "thumb_MCP": 1.0456,
+    "thumb_IP": 0.9898,
+    "wrist": 1.0017,
+    "forearm_mid": 1.0
+   },
+   "joint_volume_min": 0.4814,
+   "normal_dev_p99": 26.359,
+   "curv_jump_p95": 2.7514
+  },
+  "grip": {
+   "volume_ratio": 0.9839,
+   "self_intersections": 1214,
+   "edge_strain_p99": 0.4836,
+   "collapsed_faces": 64,
+   "joint_volume": {
+    "index_MCP": 0.9346,
+    "index_PIP": 0.9411,
+    "index_DIP": 0.9814,
+    "middle_MCP": 1.133,
+    "middle_PIP": 0.9335,
+    "middle_DIP": 0.9779,
+    "ring_MCP": 1.1642,
+    "ring_PIP": 0.9305,
+    "ring_DIP": 0.9808,
+    "little_MCP": 1.217,
+    "little_PIP": 0.9445,
+    "little_DIP": 0.9821,
+    "thumb_MCP": 1.0312,
+    "thumb_IP": 0.9962,
+    "wrist": 1.0028,
+    "forearm_mid": 1.0
+   },
+   "joint_volume_min": 0.9305,
+   "normal_dev_p99": 25.028,
+   "curv_jump_p95": 2.4748
+  },
+  "high_five": {
+   "volume_ratio": 1.0125,
+   "self_intersections": 34,
+   "edge_strain_p99": 0.2939,
+   "collapsed_faces": 0,
+   "joint_volume": {
+    "index_MCP": 1.5247,
+    "index_PIP": 1.0001,
+    "index_DIP": 0.9993,
+    "middle_MCP": 0.9142,
+    "middle_PIP": 1.0,
+    "middle_DIP": 0.9993,
+    "ring_MCP": 0.8877,
+    "ring_PIP": 1.0,
+    "ring_DIP": 0.9993,
+    "little_MCP": 0.8705,
+    "little_PIP": 1.0001,
+    "little_DIP": 0.9993,
+    "thumb_MCP": 1.0131,
+    "thumb_IP": 0.9971,
+    "wrist": 0.9952,
+    "forearm_mid": 1.0
+   },
+   "joint_volume_min": 0.8705,
+   "normal_dev_p99": 20.685,
+   "curv_jump_p95": 1.8384
+  }
+ },
+ "twist_90": {
+  "volume_ratio": 0.9741,
+  "self_intersections": 0,
+  "edge_strain_p99": 0.0378,
+  "collapsed_faces": 0,
+  "joint_volume": {
+   "index_MCP": 1.0,
+   "index_PIP": 1.0,
+   "index_DIP": 1.0,
+   "middle_MCP": 1.0,
+   "middle_PIP": 1.0,
+   "middle_DIP": 1.0,
+   "ring_MCP": 1.0,
+   "ring_PIP": 1.0,
+   "ring_DIP": 1.0,
+   "little_MCP": 1.0,
+   "little_PIP": 1.0,
+   "little_DIP": 1.0,
+   "thumb_MCP": 1.0,
+   "thumb_IP": 1.0,
+   "wrist": 1.0,
+   "forearm_mid": 0.9361
+  },
+  "joint_volume_min": 0.9361
+ },
+ "wrist_flex_70": {
+  "volume_ratio": 0.9902,
+  "self_intersections": 0,
+  "edge_strain_p99": 0.4906,
+  "collapsed_faces": 80,
+  "joint_volume": {
+   "index_MCP": 1.0,
+   "index_PIP": 1.0,
+   "index_DIP": 1.0,
+   "middle_MCP": 1.0,
+   "middle_PIP": 1.0,
+   "middle_DIP": 1.0,
+   "ring_MCP": 1.0,
+   "ring_PIP": 1.0,
+   "ring_DIP": 1.0,
+   "little_MCP": 1.0,
+   "little_PIP": 1.0,
+   "little_DIP": 1.0,
+   "thumb_MCP": 1.0,
+   "thumb_IP": 1.0,
+   "wrist": 0.7706,
+   "forearm_mid": 1.0
+  },
+  "joint_volume_min": 0.7706
+ },
+ "proportions": {
+  "hand_length_mm": 188.59,
+  "breadth_mm": 86.24,
+  "index_len_mm": 81.34,
+  "index_width_mm": 18.61,
+  "middle_len_mm": 93.59,
+  "middle_width_mm": 18.66,
+  "ring_len_mm": 88.43,
+  "ring_width_mm": 17.25,
+  "little_len_mm": 68.83,
+  "little_width_mm": 15.34
+ },
+ "proportion_target": {
+  "hand_length_mm": 190.0,
+  "breadth_mm": 86.0,
+  "index_len_mm": 81.68,
+  "index_width_mm": 18.72,
+  "middle_len_mm": 93.68,
+  "middle_width_mm": 18.72,
+  "ring_len_mm": 88.55,
+  "ring_width_mm": 17.28,
+  "little_len_mm": 69.38,
+  "little_width_mm": 15.36
+ },
+ "timing": {
+  "build_s": 0.045,
+  "rest_metrics_s": 0.523,
+  "battery_s": 2.246
+ },
+ "total_s": 2.85
+}
