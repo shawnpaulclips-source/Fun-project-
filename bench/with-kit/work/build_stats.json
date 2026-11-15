@@ -1,10 +1,10 @@
 {
-  "triangles": 19588,
-  "cam_distance": 13.097,
-  "mario_scale": 1.2552,
-  "luigi_scale": 1.2626,
-  "koopa_scale": 1.743,
-  "objects": 30,
+  "triangles": 20124,
+  "cam_distance": 11.263,
+  "mario_scale": 1.0563,
+  "luigi_scale": 1.0787,
+  "koopa_scale": 1.4377,
+  "objects": 31,
   "bones": {
     "Mario_rig": 17,
     "Luigi_rig": 17,

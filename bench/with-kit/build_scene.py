@@ -49,6 +49,22 @@ def apply_rot(ob):
     return ob
 
 
+def fit_height(rig, body, h_target):
+    """Uniform scale on the ARMATURE so the character stands exactly h_target
+    tall. Measured from the object bound box after an explicit depsgraph update
+    - reading evaluated_get() before the update returns the pre-modifier mesh
+    and silently gives the wrong scale factor."""
+    rig.scale = (1, 1, 1)
+    bpy.context.view_layer.update()
+    zs = [body.matrix_world @ Vector(c) for c in body.bound_box]
+    zmax = max(v.z for v in zs)
+    k = h_target / zmax
+    rig.scale = (k, k, k)
+    bpy.context.view_layer.update()
+    print(f"[fit] {rig.name}: raw {zmax:.4f} -> x{k:.4f} = {h_target}")
+    return k
+
+
 # ===================================================================== plumber
 def build_plumber(name, shirt, hat, h_target, le=0.0, w=1.0):
     """le = leg extra (Luigi is taller in the legs), w = body width factor."""
@@ -78,16 +94,16 @@ def build_plumber(name, shirt, hat, h_target, le=0.0, w=1.0):
     # --- legs / boots
     for s, sg in (("L", 1), ("R", -1)):
         pr(box(f"{name}_boot.{s}", (0.030, sg * hy, Z_ANK - 0.042),
-               (0.215, 0.120 * w, 0.100), mat=P["brown"], bevel=0.016), f"foot.{s}")
+               (0.235, 0.140 * w, 0.110), mat=P["brown"], bevel=0.018), f"foot.{s}")
         pr(limb(f"{name}_shin.{s}", (0, sg * hy, Z_KNEE), (0, sg * hy, Z_ANK - 0.01),
-                0.054 * w, P["blue"]), f"shin.{s}")
+                0.062 * w, P["blue"]), f"shin.{s}")
         pr(limb(f"{name}_thigh.{s}", (0, sg * hy, Z_HIP + 0.01), (0, sg * hy, Z_KNEE),
-                0.066 * w, P["blue"]), f"thigh.{s}")
+                0.076 * w, P["blue"]), f"thigh.{s}")
     # --- torso
     pr(box(f"{name}_overalls", (0, 0, (Z_HIP + Z_WAIST) / 2 + 0.015),
-           (0.175, 0.225 * w, 0.185), mat=P["blue"], bevel=0.030), "hips")
+           (0.205, 0.265 * w, 0.195), mat=P["blue"], bevel=0.034), "hips")
     pr(box(f"{name}_shirt", (0, 0, Z_CHEST + 0.045),
-           (0.190, 0.245 * w, 0.150), mat=shirt, bevel=0.034), "chest")
+           (0.215, 0.290 * w, 0.165), mat=shirt, bevel=0.038), "chest")
     for sg in (1, -1):
         pr(box(f"{name}_strap{sg}", (0.090, sg * 0.062 * w, Z_CHEST + 0.055),
                (0.028, 0.055 * w, 0.165), mat=P["blue"], bevel=0.006), "chest")
@@ -96,45 +112,39 @@ def build_plumber(name, shirt, hat, h_target, le=0.0, w=1.0):
     # --- arms
     for s, sg in (("L", 1), ("R", -1)):
         pr(limb(f"{name}_uarm.{s}", (0, sg * sy, Z_SHLD + 0.015),
-                (0, sg * (sy + 0.055), Z_SHLD - 0.105), 0.048 * w, shirt), f"uarm.{s}")
+                (0, sg * (sy + 0.055), Z_SHLD - 0.105), 0.058 * w, shirt), f"uarm.{s}")
         pr(limb(f"{name}_larm.{s}", (0, sg * (sy + 0.050), Z_SHLD - 0.095),
-                (0, sg * (sy + 0.075), Z_SHLD - 0.205), 0.042 * w, shirt), f"larm.{s}")
-        pr(ball(f"{name}_hand.{s}", (0, sg * (sy + 0.080), Z_SHLD - 0.240), 0.058,
+                (0, sg * (sy + 0.075), Z_SHLD - 0.205), 0.052 * w, shirt), f"larm.{s}")
+        pr(ball(f"{name}_hand.{s}", (0, sg * (sy + 0.082), Z_SHLD - 0.248), 0.066,
                 scale=(1.0, 0.85, 1.0), mat=P["white"], seg=12, rings=8), f"hand.{s}")
     # --- head
-    pr(ball(f"{name}_head", (0.005, 0, Z_HEAD), 0.108, scale=(1.08, 1.0, 1.02),
-            mat=P["skin"], seg=18, rings=12), "head")
-    pr(ball(f"{name}_nose", (0.105, 0, Z_HEAD - 0.012), 0.054,
+    pr(ball(f"{name}_head", (0.005, 0, Z_HEAD + 0.030), 0.142, scale=(1.05, 0.97, 1.00),
+            mat=P["skin"], seg=20, rings=14), "head")
+    pr(ball(f"{name}_nose", (0.132, 0, Z_HEAD + 0.012), 0.068,
             scale=(1.15, 1.0, 1.0), mat=P["skin"], seg=12, rings=8), "head")
     for sg in (1, -1):
-        pr(box(f"{name}_mous{sg}", (0.092, sg * 0.032, Z_HEAD - 0.062),
-               (0.090, 0.060, 0.034), mat=P["hair"], bevel=0.010), "head")
-        pr(ball(f"{name}_eyew{sg}", (0.090, sg * 0.036, Z_HEAD + 0.038), 0.028,
+        pr(box(f"{name}_mous{sg}", (0.112, sg * 0.040, Z_HEAD - 0.042),
+               (0.110, 0.080, 0.042), mat=P["hair"], bevel=0.012), "head")
+        pr(ball(f"{name}_eyew{sg}", (0.110, sg * 0.046, Z_HEAD + 0.082), 0.036,
                 scale=(0.55, 1.0, 1.30), mat=P["white"], seg=10, rings=8), "head")
-        pr(ball(f"{name}_eyep{sg}", (0.108, sg * 0.036, Z_HEAD + 0.036), 0.016,
+        pr(ball(f"{name}_eyep{sg}", (0.134, sg * 0.046, Z_HEAD + 0.080), 0.019,
                 scale=(0.6, 1.0, 1.1), mat=P["black"], seg=8, rings=6), "head")
-        pr(ball(f"{name}_ear{sg}", (-0.020, sg * 0.104, Z_HEAD - 0.010), 0.032,
+        pr(ball(f"{name}_ear{sg}", (-0.030, sg * 0.136, Z_HEAD + 0.020), 0.040,
                 scale=(1.0, 0.6, 1.1), mat=P["skin"], seg=10, rings=8), "head")
-        pr(ball(f"{name}_sideb{sg}", (-0.050, sg * 0.080, Z_HEAD - 0.045), 0.040,
+        pr(ball(f"{name}_sideb{sg}", (-0.062, sg * 0.108, Z_HEAD - 0.020), 0.048,
                 scale=(1.0, 0.7, 0.9), mat=P["hair"], seg=10, rings=8), "head")
     # --- cap: lathed crown + brim + emblem
-    pr(lathe(f"{name}_crown", (0.005, 0, Z_CAP - 0.030),
-             [(0.000, 0.088), (0.046, 0.082), (0.080, 0.058),
-              (0.100, 0.026), (0.106, 0.000), (0.106, -0.022)],
+    pr(lathe(f"{name}_crown", (0.005, 0, Z_CAP + 0.028),
+             [(0.000, 0.112), (0.060, 0.104), (0.104, 0.074),
+              (0.130, 0.034), (0.140, 0.000), (0.140, -0.030)],
              mat=hat, steps=22), "cap")
-    pr(box(f"{name}_brim", (0.108, 0, Z_CAP - 0.050), (0.125, 0.165, 0.030),
-           mat=hat, bevel=0.012), "cap")
-    pr(ball(f"{name}_emblem", (0.078, 0, Z_CAP + 0.000), 0.040,
-            scale=(0.35, 1.0, 1.0), mat=P["white"], seg=12, rings=8), "cap")
+    pr(box(f"{name}_brim", (0.158, 0, Z_CAP + 0.006), (0.165, 0.215, 0.038),
+           mat=hat, bevel=0.014), "cap")
+    pr(ball(f"{name}_emblem", (0.108, 0, Z_CAP + 0.052), 0.052,
+            scale=(0.30, 1.0, 1.0), mat=P["white"], seg=12, rings=8), "cap")
 
     rig, body = rg.build()
-    # exact height -> uniform scale on the armature object
-    dg = bpy.context.evaluated_depsgraph_get()
-    me = body.evaluated_get(dg).data
-    zmax = max(v.co.z for v in me.vertices)
-    k = h_target / zmax
-    rig.scale = (k, k, k)
-    bpy.context.view_layer.update()
+    k = fit_height(rig, body, h_target)
     return rig, body, k
 
 
@@ -179,26 +189,21 @@ def build_koopa(name):
                                     0.118 * math.sin(a), 0.175 + 0.095 * math.cos(a)),
                 0.034, scale=(0.5, 1.0, 1.0), mat=P["shelll"], seg=8, rings=6), "shell")
     # head
-    pr(ball(f"{name}_head", (0.055, 0, 0.345), 0.105, scale=(1.0, 0.95, 0.92),
+    pr(ball(f"{name}_head", (0.085, 0, 0.360), 0.135, scale=(1.0, 0.95, 0.94),
             mat=P["yellow"], seg=18, rings=12), "head")
-    pr(cyl(f"{name}_beak", (0.165, 0, 0.330), 0.052, 0.080, rot=(0, R(90), 0),
+    pr(cyl(f"{name}_beak", (0.225, 0, 0.345), 0.062, 0.105, rot=(0, R(90), 0),
            r2=0.012, mat=P["beak"], seg=12, bevel=0.0), "head")
     for sg in (1, -1):
-        pr(ball(f"{name}_eyew{sg}", (0.105, sg * 0.048, 0.392), 0.034,
+        pr(ball(f"{name}_eyew{sg}", (0.145, sg * 0.056, 0.420), 0.040,
                 scale=(0.8, 1.0, 1.15), mat=P["white"], seg=10, rings=8), "eye")
-        pr(ball(f"{name}_eyep{sg}", (0.128, sg * 0.050, 0.390), 0.018,
+        pr(ball(f"{name}_eyep{sg}", (0.176, sg * 0.058, 0.418), 0.020,
                 mat=P["black"], seg=8, rings=6), "eye")
         for rr in (35, -35):
-            pr(box(f"{name}_x{sg}_{rr}", (0.122, sg * 0.050, 0.392),
-                   (0.012, 0.012, 0.085), rot=(0, R(rr), 0),
+            pr(box(f"{name}_x{sg}_{rr}", (0.172, sg * 0.058, 0.420),
+                   (0.016, 0.014, 0.105), rot=(0, R(rr), 0),
                    mat=P["black"], bevel=0.0), "xeye")
-    rig, body, = rg.build()
-    dg = bpy.context.evaluated_depsgraph_get()
-    me = body.evaluated_get(dg).data
-    zmax = max(v.co.z for v in me.vertices)
-    k = 0.70 / zmax
-    rig.scale = (k, k, k)
-    bpy.context.view_layer.update()
+    rig, body = rg.build()
+    k = fit_height(rig, body, 0.70)
     # eyes normal, X hidden
     rig.pose.bones["xeye"].scale = (0.001, 0.001, 0.001)
     bpy.context.view_layer.update()
@@ -370,9 +375,9 @@ def main():
         cloud(f"Cloud{i}", x, z, s)
     # sky card + hills
     sky = box("Sky", (0, 15.0, 5.0), (90, 0.2, 34), mat=P["sky"], bevel=0.0)
-    for i, (x, r) in enumerate(((-9, 5.5), (2, 4.4), (12, 6.0))):
-        h = ball(f"Hill{i}", (x, 11.0, -1.4), r, scale=(1.0, 0.25, 0.55),
-                 mat=P["green"], seg=16, rings=10)
+    for i, (x, r) in enumerate(((-11, 3.2), (-3.5, 2.4), (4.5, 3.0), (13, 2.6))):
+        ball(f"Hill{i}", (x, 12.0, -1.55), r, scale=(1.0, 0.22, 0.52),
+             mat=P["green"], seg=16, rings=10)
     lap("environment")
 
     mario_rig, mario_body, km = build_plumber("Mario", P["red"], P["red"], 0.90, le=0.0, w=1.0)
@@ -420,9 +425,9 @@ def main():
     cam = bpy.data.objects.new("Camera", cam_d)
     sc.collection.objects.link(cam)
     sc.camera = cam
-    frame_h = 5.0
+    frame_h = 4.3
     dist = RN.frame_distance(frame_h, lens=50.0, sensor=36.0 * 480 / 854, margin=1.06)
-    cam.location = (-5.6, -dist, 1.85)
+    cam.location = (-5.6, -dist, 1.55)
     cam.rotation_euler = Euler((R(90), 0, 0), 'XYZ')
     print(f"[cam] side-on distance for a {frame_h} unit tall frame: {dist:.2f}")
 

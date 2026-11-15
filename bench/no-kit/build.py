@@ -115,14 +115,14 @@ def plumber(name, shirt, hat, tall=1.0, wide=1.0, nose_r=0.072,
              (0.118, 0, 0.100 * tall), m_hair, bevel=0.02)
     attach_local(ms, head)
     for s in (-1, 1):
-        ey = sphere(p + ".eye%d" % s, 0.040, (0.112, 0.055 * s, 0.215 * tall),
-                    m_white, segs=12, rings=8, scale=(0.7, 1.0, 1.25))
+        ey = sphere(p + ".eye%d" % s, 0.040, (0.122, 0.058 * s, 0.218 * tall),
+                    m_white, segs=12, rings=8, scale=(0.75, 1.0, 1.3))
         attach_local(ey, head)
-        pu = sphere(p + ".pupil%d" % s, 0.019,
-                    (0.139, 0.058 * s, 0.215 * tall), m_dark, segs=10, rings=6)
+        pu = sphere(p + ".pupil%d" % s, 0.024,
+                    (0.152, 0.061 * s, 0.218 * tall), m_dark, segs=10, rings=6)
         attach_local(pu, head)
         eb = box(p + ".brow%d" % s, (0.030, 0.026, 0.011),
-                 (0.118, 0.055 * s, 0.262 * tall), m_hair)
+                 (0.128, 0.058 * s, 0.268 * tall), m_hair)
         attach_local(eb, head)
         er = sphere(p + ".ear%d" % s, 0.045, (-0.01, 0.154 * s, 0.158 * tall),
                     m_skin, segs=10, rings=7, scale=(1.0, 0.6, 1.1))
@@ -181,9 +181,9 @@ def koopa(name="koopa"):
 
     root = joint(p, (0, 0, 0))
     root.empty_display_size = 0.2
-    hips = joint(p + ".hips", (0, 0, 0.30), root)
+    hips = joint(p + ".hips", (0, 0, 0.34), root)
     body = joint(p + ".body", (0, 0, 0), hips)
-    neck = joint(p + ".neck", (0.03, 0, 0.26), body)
+    neck = joint(p + ".neck", (0.04, 0, 0.30), body)
     head = joint(p + ".head", (0, 0, 0), neck)
 
     torso = sphere(p + ".torso", 0.175, (0, 0, 0.03), m_sk, segs=18, rings=11,
@@ -253,20 +253,31 @@ def koopa(name="koopa"):
 # ------------------------------------------------------------------ world
 
 def q_mark(parent, zoff, material):
-    """'?' glyph built from slabs, on the +Y and -Y faces of a block."""
-    seg = [((0.000, 0.205), (0.078, 0.034)),      # top bar
-           ((-0.078, 0.150), (0.034, 0.055)),     # upper-left shoulder
-           ((0.078, 0.140), (0.034, 0.065)),      # upper-right side
-           ((0.030, 0.060), (0.082, 0.034)),      # hook coming back left
-           ((0.000, -0.020), (0.034, 0.082)),     # stem
-           ((0.000, -0.145), (0.040, 0.040))]     # dot
+    """'?' as a pixel grid, stamped on the +Y and -Y faces of a block."""
+    rows = ["..XXX..",
+            ".X...X.",
+            ".X...X.",
+            "....X..",
+            "...X...",
+            "...X...",
+            ".......",
+            "...X..."]
+    cell = 0.072
     out = []
+    h = len(rows)
+    w = len(rows[0])
     for sgn in (-1, 1):
-        for i, ((ox, oz), (sx, sz)) in enumerate(seg):
-            b = box("qm_%d_%d" % (sgn, i), (sx, 0.020, sz),
-                    (ox, 0.498 * sgn, zoff + oz), material)
-            attach_local(b, parent)
-            out.append(b)
+        for r, line in enumerate(rows):
+            for c, ch in enumerate(line):
+                if ch != "X":
+                    continue
+                ox = (c - (w - 1) / 2.0) * cell
+                oz = ((h - 1) / 2.0 - r) * cell
+                b = box("qm_%d_%d_%d" % (sgn, r, c),
+                        (cell * 0.52, 0.020, cell * 0.52),
+                        (ox, 0.498 * sgn, zoff + oz), material)
+                attach_local(b, parent)
+                out.append(b)
     return out
 
 
@@ -507,14 +518,14 @@ def camera():
 def build_set():
     s = {}
     s["ground"] = ground()
-    s["bricks"] = [brick((x, 0, 2.0), "brick_%d" % i)
-                   for i, x in enumerate((-3.0, -2.0, -1.0, 1.0, 2.0, 3.0))]
-    s["qb"] = q_block((0.0, 0, 2.0))
+    s["bricks"] = [brick((x, 0, 1.9), "brick_%d" % i)
+                   for i, x in enumerate((-2.0, -1.0, 1.0, 2.0))]
+    s["qb"] = q_block((0.0, 0, 1.9))
     s["pipe"] = pipe((9.5, 0, 0.0))
     s["pipe2"] = pipe((-13.0, 0, 0.0))
-    s["mush"] = mushroom((0.0, 0, 2.0))
+    s["mush"] = mushroom((0.0, 0, 1.9))
     s["mush"].scale = (0, 0, 0)
-    s["coin"] = coin((0.0, 0, 2.0))
+    s["coin"] = coin((0.0, 0, 1.9))
     s["coin"].scale = (0, 0, 0)
     s["lshell"] = loose_shell((0, 0, 0.26))
     s["clouds"] = clouds()
