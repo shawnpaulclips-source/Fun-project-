@@ -240,40 +240,102 @@ POSE_BATTERY = [
 ]
 
 
-def pose_test(rig, mesh, poses=None):
-    """Drive the rig through extreme poses and measure mesh damage.
+def _pose_targets(rig, substr):
+    """Pick the bones to rotate for a pose-battery entry.
 
-    Returns per-pose self-intersection counts and volume ratio. Both are blind
-    metrics: self-intersections rise monotonically with a bad bend, and a volume
-    ratio below ~0.93 means the joint is pinching.
+    On a Rigify rig the DEF- bones are constrained to follow the control chain,
+    so rotating them directly does NOTHING - the test would report a perfect
+    joint that was never bent. Prefer FK controls, then any unprefixed control,
+    and only fall back to deform bones on a plain (non-Rigify) armature.
     """
-    from . import inspect as fkinspect
+    skip = ("mch-", "org-", "def-", "wgt-", "vis_")
+    cands = [pb for pb in rig.pose.bones if substr in pb.name.lower()]
+    fk = [pb for pb in cands if "_fk" in pb.name.lower()]
+    if fk:
+        return fk
+    ctrl = [pb for pb in cands if not pb.name.lower().startswith(skip)
+            and "_ik" not in pb.name.lower() and "tweak" not in pb.name.lower()]
+    plain = [pb for pb in ctrl if not pb.constraints]
+    if plain:
+        return plain
+    return [pb for pb in cands if pb.bone.use_deform and not pb.constraints]
+
+
+def pose_test(rig, mesh, poses=None, joint_radius=0.6):
+    """Drive the rig through extreme poses and measure mesh damage PER JOINT.
+
+    Whole-mesh volume is the wrong number: measured on a hand, it stayed >= 0.994
+    while a single knuckle folded completely inside out. A pinch is local, so this
+    reports the local volume of the surface patch around each bent joint (a cone
+    from the joint centre, formq.deformation) as well as the whole-mesh figures.
+
+    joint_volume_min < ~0.90  the joint is pinching
+    joint_volume_min < 0      the joint has folded through itself
+    self_intersections        rises monotonically with a bad bend
+
+    Rigify limbs are switched to FK for the test and restored afterwards.
+    """
+    from . import formq as Q
     poses = poses or POSE_BATTERY
     bpy.context.view_layer.objects.active = rig
-    bpy.ops.object.mode_set(mode="POSE")
-    base_vol = fkinspect.mesh_stats(mesh)["volume_m3"] or 1.0
-    results = []
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+    saved_switch = {b: rig.pose.bones[b][k] for b, k in ik_fk_switches(rig).items()}
+    set_ik_fk(rig, 1.0)
+
+    # joint centres = head of each bone we will bend, in world space at rest.
+    # Patch radius must reach the skin: a spine bone sits ~15 cm inside a torso
+    # but is only ~10 cm long, so a length-only radius captures no faces at all.
+    import numpy as np
+    V0 = Q.arrays(mesh, True)["V"]
+    plan = []
+    joints = {}
     for substr, axis, deg in poses:
-        hits = [pb for pb in rig.pose.bones if substr in pb.name.lower()
-                and pb.bone.use_deform]
-        if not hits:
-            results.append({"pose": f"{substr}:{axis}{deg}", "skipped": "no matching bone"})
+        targets = _pose_targets(rig, substr)
+        plan.append((substr, axis, deg, targets))
+        for pb in targets:
+            head = np.asarray(rig.matrix_world @ pb.head)
+            skin = float(np.sqrt(((V0 - head) ** 2).sum(axis=1)).min()) if len(V0) else 0.0
+            joints[pb.name] = (tuple(head), max(pb.bone.length * joint_radius, skin * 1.4, 1e-4))
+    bpy.context.view_layer.update()
+    rest = Q.RestCache(mesh, joints=joints)
+
+    bpy.ops.object.mode_set(mode="POSE")
+    results = []
+    for substr, axis, deg, targets in plan:
+        tag = f"{substr}:{axis}{deg}"
+        if not targets:
+            results.append({"pose": tag, "skipped": "no poseable bone"})
             continue
-        for pb in hits:
+        saved = [(pb, pb.rotation_mode, tuple(pb.rotation_euler), tuple(pb.rotation_quaternion))
+                 for pb in targets]
+        for pb in targets:
             pb.rotation_mode = "XYZ"
             setattr(pb.rotation_euler, axis.lower(), R(deg))
         bpy.context.view_layer.update()
-        vol = fkinspect.mesh_stats(mesh)["volume_m3"] or 0.0
+        centres = {pb.name: tuple(rig.matrix_world @ pb.head) for pb in targets}
+        d = Q.deformation(mesh, rest, joint_centres=centres)
+        jv = {k: v for k, v in (d.get("joint_volume") or {}).items() if k in centres}
+        vals = [v for v in jv.values() if v is not None]
         results.append({
-            "pose": f"{substr}:{axis}{deg}",
-            "bones": len(hits),
-            "self_intersections": fkinspect.self_intersections(mesh),
-            "volume_ratio": round(vol / base_vol, 4) if base_vol else None,
+            "pose": tag,
+            "bones": [pb.name for pb in targets],
+            "joint_volume": jv,
+            "joint_volume_min": round(min(vals), 4) if vals else None,
+            "volume_ratio": d["volume_ratio"],
+            "self_intersections": d["self_intersections"],
+            "edge_strain_p99": d["edge_strain_p99"],
+            "verdict": ("FOLDED" if vals and min(vals) < 0 else
+                        "PINCH" if vals and min(vals) < 0.90 else "ok"),
         })
-        for pb in hits:
-            pb.rotation_euler = (0, 0, 0)
+        for pb, mode, eul, quat in saved:
+            pb.rotation_mode = mode
+            pb.rotation_euler = eul
+            pb.rotation_quaternion = quat
         bpy.context.view_layer.update()
     bpy.ops.object.mode_set(mode="OBJECT")
+    for b, v in saved_switch.items():
+        rig.pose.bones[b][ik_fk_switches(rig)[b]] = v
     return results
 
 
