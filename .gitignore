@@ -3,3 +3,6 @@ __pycache__/
 bench/*/renders/
 bench/*/frames/
 bench/*/playblast/
+bench/*/tmp/
+bench/*/work/*.blend
+bench/*/stills/
