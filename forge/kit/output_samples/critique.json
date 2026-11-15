@@ -1,0 +1,94 @@
+{
+  "before": {
+    "metrics": {
+      "DEF-foot.L": {
+        "speed_max_m_per_frame": 0.16997,
+        "jerk_max": 0.33994,
+        "path_length_m": 1.5241,
+        "arc_straightness": 1.0,
+        "loop_seam_error_m": 0.0,
+        "foot_slide_m": 0.10082
+      },
+      "DEF-foot.R": {
+        "speed_max_m_per_frame": 0.16997,
+        "jerk_max": 0.33994,
+        "path_length_m": 1.5241,
+        "arc_straightness": 1.0,
+        "loop_seam_error_m": 0.0,
+        "foot_slide_m": 0.10082
+      },
+      "head": {
+        "speed_max_m_per_frame": 0.01585,
+        "jerk_max": 0.01449,
+        "path_length_m": 0.1705,
+        "arc_straightness": 0.9664,
+        "loop_seam_error_m": 0.0
+      },
+      "torso": {
+        "speed_max_m_per_frame": 0.0,
+        "jerk_max": 0.0,
+        "path_length_m": 0.0,
+        "arc_straightness": 0.0,
+        "loop_seam_error_m": 0.0
+      }
+    },
+    "report": {
+      "score": 52,
+      "fails": [
+        "DEF-foot.L: jerk 0.340 > 0.08 - pops. anim.decimate() or soften handles",
+        "DEF-foot.L: foot slide 101mm - plant the contact",
+        "DEF-foot.R: jerk 0.340 > 0.08 - pops. anim.decimate() or soften handles",
+        "DEF-foot.R: foot slide 101mm - plant the contact"
+      ],
+      "warns": [],
+      "bones_checked": 4,
+      "bones_clean": 2
+    }
+  },
+  "after": {
+    "metrics": {
+      "DEF-foot.L": {
+        "speed_max_m_per_frame": 0.14952,
+        "jerk_max": 0.29904,
+        "path_length_m": 1.5316,
+        "arc_straightness": 1.0,
+        "loop_seam_error_m": 0.0,
+        "foot_slide_m": 0.0635
+      },
+      "DEF-foot.R": {
+        "speed_max_m_per_frame": 0.14952,
+        "jerk_max": 0.29904,
+        "path_length_m": 1.5315,
+        "arc_straightness": 1.0,
+        "loop_seam_error_m": 0.0,
+        "foot_slide_m": 0.0635
+      },
+      "head": {
+        "speed_max_m_per_frame": 0.00887,
+        "jerk_max": 0.00458,
+        "path_length_m": 0.1697,
+        "arc_straightness": 0.9612,
+        "loop_seam_error_m": 0.0
+      },
+      "torso": {
+        "speed_max_m_per_frame": 0.0,
+        "jerk_max": 0.0,
+        "path_length_m": 0.0,
+        "arc_straightness": 0.0,
+        "loop_seam_error_m": 0.0
+      }
+    },
+    "report": {
+      "score": 52,
+      "fails": [
+        "DEF-foot.L: jerk 0.299 > 0.08 - pops. anim.decimate() or soften handles",
+        "DEF-foot.L: foot slide 64mm - plant the contact",
+        "DEF-foot.R: jerk 0.299 > 0.08 - pops. anim.decimate() or soften handles",
+        "DEF-foot.R: foot slide 64mm - plant the contact"
+      ],
+      "warns": [],
+      "bones_checked": 4,
+      "bones_clean": 2
+    }
+  }
+}
