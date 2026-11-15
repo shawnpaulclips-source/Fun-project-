@@ -144,7 +144,9 @@ def _new_image(name, res, non_color):
     img = bpy.data.images.get(name)
     if img is not None:
         bpy.data.images.remove(img)
-    img = bpy.data.images.new(name, width=res, height=res, alpha=False,
+    # alpha=True so pixels the bake never touched keep alpha 0: that is the UV
+    # coverage mask. Alpha is forced back to 1 before saving.
+    img = bpy.data.images.new(name, width=res, height=res, alpha=True,
                               float_buffer=False, is_data=non_color)
     img.colorspace_settings.name = _NON_COLOR if non_color else "sRGB"
     return img
@@ -287,13 +289,21 @@ def bake_material(obj, material, channels=CHANNELS, resolution=1024, samples=8,
                 for m, n in nodes:
                     m.node_tree.nodes.remove(n)
             dt = time.time() - t
+            px = _pixels(img)
+            covered = px[..., 3] > 0.5
+            cov = float(covered.mean())
+            mean = px[covered][:, :3].mean(axis=0) if covered.any() else np.zeros(3)
+            px[..., 3] = 1.0
+            img.pixels.foreach_set(px.reshape(-1))
             path = os.path.join(out_dir, f"{img.name}.png")
             img.filepath_raw = path
             img.file_format = "PNG"
             img.save()
-            px = _pixels(img)
+            # mean is over covered texels only (UV islands + bake margin), in the
+            # image's stored encoding: sRGB for base_color, linear for the rest.
             results[ch] = {"image": img.name, "path": path, "seconds": round(dt, 3),
-                           "mean": [round(float(v), 4) for v in px[..., :3].mean(axis=(0, 1))],
+                           "mean": [round(float(v), 4) for v in mean],
+                           "coverage": round(cov, 4),
                            "bytes": os.path.getsize(path)}
     finally:
         sc.cycles.samples = prev_samples

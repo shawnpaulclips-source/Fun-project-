@@ -403,7 +403,7 @@ def _ftl_clamp(state, P):
 
 
 def step(state, root_accel=None, dt=1.0 / 60.0, targets=None, forcing=None,
-         substeps=None, iterations=None, ftl=True):
+         substeps=None, iterations=None, ftl=True, reaction=False, carry=True):
     """Advance every chain by dt seconds. Returns state.P (updated in place).
 
     root_accel: (3,) or (C, 3) root acceleration for in-place driving; it becomes
@@ -438,6 +438,9 @@ def step(state, root_accel=None, dt=1.0 / 60.0, targets=None, forcing=None,
     vmax = (0.5 * L / h)[..., None]
     alpha_t = (state.compliance / (h * h))[:, None]
     actm = act[..., None]
+    # each tail drags every particle beyond it through the length constraint;
+    # scaling by that count makes stiffness mean the same at root and tip
+    carried = np.cumsum(act[:, ::-1], axis=1)[:, ::-1][..., None]
 
     # red-black index views (even segments, odd segments)
     ev, od = slice(0, N1 - 1, 2), slice(1, N1 - 1, 2)
@@ -463,8 +466,12 @@ def step(state, root_accel=None, dt=1.0 / 60.0, targets=None, forcing=None,
         vr = V[:, 1:] - V[:, :-1]
         vr_t = vr - (vr * dcur).sum(-1, keepdims=True) * dcur
         a_tail = (a_spring - cd * vr_t) * actm
+        if carry:
+            a_tail *= carried
 
         V[:, 1:] += h * a_tail
+        if reaction:
+            V[:, :-1] -= h * a_tail
         V += h * acc_ext * free
         V *= drag_f
         # velocity clamp per particle (uses the incoming bone's length)
