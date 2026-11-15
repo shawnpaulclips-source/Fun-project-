@@ -55,6 +55,9 @@ check("bake 1024 all five channels", set(baked["channels"]) == set(BK.CHANNELS),
 bc = baked["channels"]["base_color"]["mean"]
 check("base_color not black (metal diffuse trap avoided)", max(bc) > 0.3, f"mean sRGB={bc}")
 check("base_color is brass-hued (R>G>B)", bc[0] > bc[1] > bc[2], f"{bc}")
+# brass linear (0.681, 0.451, 0.157) encodes to sRGB ~(0.846, 0.705, 0.434); edge wear brightens a little
+check("base_color matches brass in sRGB (colour management correct)",
+      abs(bc[0] - 0.846) < 0.08 and abs(bc[2] - 0.434) < 0.08, f"{bc} cov={baked['channels']['base_color']['coverage']}")
 mt = baked["channels"]["metallic"]["mean"][0]
 check("metallic ~1", mt > 0.9, f"{mt}")
 rg = baked["channels"]["roughness"]["mean"][0]
