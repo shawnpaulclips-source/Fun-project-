@@ -46,6 +46,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 GRAVITY = np.array([0.0, 0.0, -9.81])
+_add = np.add.reduce
 
 # ---------------------------------------------------------------- presets
 # research/06 section 11, verbatim ranges. "value" is the chosen working point
@@ -188,6 +189,7 @@ class ChainState:
     collider_mask: np.ndarray | None = None         # (C, K) 1 if chain c hits collider k
     time: float = 0.0
     stats: dict = field(default_factory=dict)
+    _padded: bool = False
 
     @property
     def shape(self):
@@ -247,6 +249,7 @@ def new_state(specs, rest_pose, substeps=None, iterations=None):
         names=[s.name for s in specs], bones=[list(s.bones) for s in specs],
     )
     st._specs = list(specs)
+    st._padded = bool(active.min() < 1.0)
     return st
 
 
@@ -388,13 +391,13 @@ def _ftl_clamp(state, P):
     lim = np.maximum(state.stretch_limit, 1e-3)[:, None]
     L = state.rest_len
     seg = P[:, 1:] - P[:, :-1]
-    ln = np.sqrt((seg * seg).sum(-1))
+    ln = np.sqrt(_add(seg * seg, axis=-1))
     if not np.any(np.abs(ln - L) > lim * L):
         return False
     lo, hi = L * (1 - lim), L * (1 + lim)
     for i in range(L.shape[1]):
         d = P[:, i + 1] - P[:, i]
-        n = np.sqrt((d * d).sum(-1))
+        n = np.sqrt(_add(d * d, axis=-1))
         tgt = np.clip(n, lo[:, i], hi[:, i])
         scale = np.where(n > 1e-12, tgt / np.maximum(n, 1e-12), 1.0)
         act = state.active[:, i][:, None]
@@ -403,15 +406,22 @@ def _ftl_clamp(state, P):
 
 
 def step(state, root_accel=None, dt=1.0 / 60.0, targets=None, forcing=None,
-         substeps=None, iterations=None, ftl=True, reaction=False, carry=True):
+         substeps=None, iterations=None, ftl=True, carry=True):
     """Advance every chain by dt seconds. Returns state.P (updated in place).
 
     root_accel: (3,) or (C, 3) root acceleration for in-place driving; it becomes
                 forcing = -root_accel perpendicular to each chain. None = 0.
+    dt:         frame time in seconds.
     targets:    optional (C, N+1, 3) animated particle positions for this frame
-                (world-space driving). Root follows them, interpolated per substep.
+                (world-space driving). The root follows targets[:, 0],
+                interpolated per substep; bone rest directions come from them.
     forcing:    optional extra (C, 3) acceleration on free particles.
-    ftl:        apply the follow-the-leader stretch clamp after each substep.
+    ftl:        follow-the-leader stretch clamp. True/"frame" = after the last
+                substep (output is always inside the band, cheapest);
+                "substep" = after every substep; False = off (pure PBD).
+    carry:      scale each bone's spring by the number of particles it carries,
+                so `stiffness` means the same angular response at root and tip.
+                Without it an upright chain under gravity buckles.
     """
     if targets is not None:
         set_targets(state, targets)
@@ -419,100 +429,112 @@ def step(state, root_accel=None, dt=1.0 / 60.0, targets=None, forcing=None,
     I = int(iterations or state.iterations)
     h = dt / S
     C, N1, _ = state.P.shape
+    N = N1 - 1
     P, V = state.P, state.V
     act = state.active
     w = state.inv_mass
-    free = (w > 0)[..., None]
     L = state.rest_len
 
-    acc_ext = state.gravity[:, None] * GRAVITY[None, :]
+    # ---- per-step constants (no per-substep allocation of these)
+    acc = state.gravity[:, None] * GRAVITY[None, :]
     if root_accel is not None:
-        acc_ext = acc_ext + drive_from_root_accel(state, root_accel)
+        acc = acc + drive_from_root_accel(state, root_accel)
     if forcing is not None:
-        acc_ext = acc_ext + np.asarray(forcing, float)
-    acc_ext = acc_ext[:, None, :]
-
-    k = (state.stiffness * 1.0)[:, None, None]
-    cd = state.damping[:, None, None]
+        acc = acc + np.asarray(forcing, float)
+    hacc = (h * acc)[:, None, :] * (w > 0)[..., None]
+    scale = act * (np.cumsum(act[:, ::-1], axis=1)[:, ::-1] if carry else 1.0)
+    k_h = (h * state.stiffness[:, None] * L * scale)[..., None]
+    c_h = (h * state.damping[:, None] * scale)[..., None]
     drag_f = ((1.0 - state.drag) ** h)[:, None, None]
-    vmax = (0.5 * L / h)[..., None]
+    vmax2 = (0.5 * L / h) ** 2
+
+    dtg = state.T[:, 1:] - state.T[:, :-1]
+    dtg /= np.maximum(np.sqrt(_add(dtg * dtg, axis=-1, keepdims=True)), 1e-12)
+    A = np.empty_like(dtg)
+    A[:, 0] = dtg[:, 0]
+    A[:, 1:] = dtg[:, :-1]
+    B = A.copy()
+    twoAv = 2.0 * _add(A * dtg, axis=-1, keepdims=True)
+
+    root0 = state.T_prev[:, 0].copy()
+    droot = state.T[:, 0] - root0
+    P0 = np.empty_like(P)
+
+    xpbd = bool(np.any(state.compliance > 0))
     alpha_t = (state.compliance / (h * h))[:, None]
-    actm = act[..., None]
-    # each tail drags every particle beyond it through the length constraint;
-    # scaling by that count makes stiffness mean the same at root and tip
-    carried = np.cumsum(act[:, ::-1], axis=1)[:, ::-1][..., None]
+    groups = []
+    for start in (0, 1):
+        sa, sb, sl = slice(start, N, 2), slice(start + 1, N1, 2), slice(start, N, 2)
+        wa, wb = w[:, sa], w[:, sb]
+        if wa.shape[1] == 0:
+            continue
+        ws = wa + wb
+        inv = np.where(ws > 0, act[:, sl] / np.maximum(ws, 1e-12), 0.0)
+        groups.append((sa, sb, L[:, sl], (wa * inv)[..., None], (wb * inv)[..., None],
+                       wa, wb, ws, act[:, sl]))
 
-    # red-black index views (even segments, odd segments)
-    ev, od = slice(0, N1 - 1, 2), slice(1, N1 - 1, 2)
-    w_ev_a, w_ev_b = w[:, 0:N1 - 1:2], w[:, 1:N1:2]
-    w_od_a, w_od_b = w[:, 1:N1 - 1:2], w[:, 2:N1:2]
-    wsum_ev = w_ev_a + w_ev_b
-    wsum_od = w_od_a + w_od_b
-
-    T0, T1 = state.T_prev, state.T
     for s in range(S):
-        f = (s + 1) / S
-        Tt = T0 + (T1 - T0) * f
-        P0 = P.copy()
+        np.copyto(P0, P)
 
-        # angular spring toward rest direction carried by the simulated parent
+        # ---- angular spring toward the rest direction carried by the sim parent
         seg = P[:, 1:] - P[:, :-1]
-        dcur, _ = _normalize(seg)
-        dtg, _ = _normalize(Tt[:, 1:] - Tt[:, :-1])
-        A = np.concatenate([dtg[:, :1], dtg[:, :-1]], axis=1)
-        B = np.concatenate([dtg[:, :1], dcur[:, :-1]], axis=1)
-        drest = _rotate_min(dtg, A, B)
-        a_spring = k * L[..., None] * (drest - dcur)
+        dcur = seg / np.maximum(np.sqrt(_add(seg * seg, axis=-1, keepdims=True)), 1e-12)
+        B[:, 1:] = dcur[:, :-1]
+        cAB = _add(A * B, axis=-1, keepdims=True)
+        ApB = A + B
+        r = _add(ApB * dtg, axis=-1, keepdims=True) / np.maximum(1.0 + cAB, 1e-6)
+        drest = dtg + B * twoAv - ApB * r          # R(A->B) applied to dtg
+        dv = k_h * (drest - dcur)
         vr = V[:, 1:] - V[:, :-1]
-        vr_t = vr - (vr * dcur).sum(-1, keepdims=True) * dcur
-        a_tail = (a_spring - cd * vr_t) * actm
-        if carry:
-            a_tail *= carried
+        vr -= _add(vr * dcur, axis=-1, keepdims=True) * dcur
+        dv -= c_h * vr
+        V[:, 1:] += dv
 
-        V[:, 1:] += h * a_tail
-        if reaction:
-            V[:, :-1] -= h * a_tail
-        V += h * acc_ext * free
+        V += hacc
         V *= drag_f
-        # velocity clamp per particle (uses the incoming bone's length)
-        vn = np.sqrt((V[:, 1:] * V[:, 1:]).sum(-1, keepdims=True))
-        V[:, 1:] *= np.minimum(1.0, vmax / np.maximum(vn, 1e-12))
+        vv = _add(V[:, 1:] * V[:, 1:], axis=-1)
+        if np.any(vv > vmax2):
+            V[:, 1:] *= np.minimum(1.0, np.sqrt(vmax2 / np.maximum(vv, 1e-24)))[..., None]
 
-        P += h * V * free
-        P[:, 0] = Tt[:, 0]
+        P += h * V
+        P[:, 0] = root0 + droot * ((s + 1) / S)
 
         if state.colliders:
             _collide(state, P, P0)
 
-        # XPBD distance projection, red-black
-        lam_ev = np.zeros_like(wsum_ev)
-        lam_od = np.zeros_like(wsum_od)
-        for _ in range(I):
-            for sl_a, sl_b, wa, wb, ws, lam, segsl in (
-                    (slice(0, N1 - 1, 2), slice(1, N1, 2), w_ev_a, w_ev_b, wsum_ev, lam_ev, ev),
-                    (slice(1, N1 - 1, 2), slice(2, N1, 2), w_od_a, w_od_b, wsum_od, lam_od, od)):
-                if ws.shape[1] == 0:
-                    continue
-                pa, pb = P[:, sl_a], P[:, sl_b]
-                d = pb - pa
-                ln = np.sqrt((d * d).sum(-1))
-                Cc = ln - L[:, segsl]
-                n = d / np.maximum(ln, 1e-12)[..., None]
-                dl = (-Cc - alpha_t * lam) / np.maximum(ws + alpha_t, 1e-12)
-                dl *= act[:, segsl]
-                lam += dl
-                pa -= (wa * dl)[..., None] * n
-                pb += (wb * dl)[..., None] * n
+        # ---- distance projection, red-black
+        if not xpbd:
+            for _ in range(I):
+                for sa, sb, Lg, fa, fb, *_rest in groups:
+                    pa, pb = P[:, sa], P[:, sb]
+                    d = pb - pa
+                    ln = np.sqrt(_add(d * d, axis=-1))
+                    g = (1.0 - Lg / np.maximum(ln, 1e-12))[..., None] * d
+                    pa += fa * g
+                    pb -= fb * g
+        else:
+            lams = [np.zeros_like(gp[7]) for gp in groups]
+            for _ in range(I):
+                for gp, lam in zip(groups, lams):
+                    sa, sb, Lg, _fa, _fb, wa, wb, ws, ag = gp
+                    pa, pb = P[:, sa], P[:, sb]
+                    d = pb - pa
+                    ln = np.sqrt(_add(d * d, axis=-1))
+                    n = d / np.maximum(ln, 1e-12)[..., None]
+                    dl = (-(ln - Lg) - alpha_t * lam) / np.maximum(ws + alpha_t, 1e-12) * ag
+                    lam += dl
+                    pa -= (wa * dl)[..., None] * n
+                    pb += (wb * dl)[..., None] * n
 
-        if ftl:
+        if ftl == "substep" or (ftl and s == S - 1):
             _ftl_clamp(state, P)
-        # padding particles ride on the last real tail
-        if act.min() < 1.0:
+        if state._padded:
             last = act.sum(1).astype(int)
-            for c in np.nonzero(last < N1 - 1)[0]:
+            for c in np.nonzero(last < N)[0]:
                 P[c, last[c] + 1:] = P[c, last[c]]
 
-        V[:] = (P - P0) / h
+        np.subtract(P, P0, out=V)
+        V /= h
     state.time += dt
     return P
 

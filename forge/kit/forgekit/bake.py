@@ -60,7 +60,7 @@ def xatlas_available():
 
 # ----------------------------------------------------------------- unwrap
 def uv_unwrap(obj, method="smart", angle_limit_deg=66.0, island_margin=0.02,
-              uv_name="UVMap"):
+              uv_name="UVMap", triangulate_on_conflict=True):
     """Unwrap obj. Returns a dict that says which unwrapper actually ran.
 
     method='smart'  : Blender Smart UV Project. ~15-20 ms on 7.5k faces. Not
@@ -72,8 +72,10 @@ def uv_unwrap(obj, method="smart", angle_limit_deg=66.0, island_margin=0.02,
     xatlas works on triangles. UVs are written back per loop through the
     triangulation; if xatlas cut a seam across a quad diagonal, the two
     triangles disagree on a shared loop and that loop keeps the first value.
-    `loop_conflicts` counts those; it is 0 on any mesh that is already
-    triangulated and usually tiny otherwise.
+    `loop_conflicts` counts those. With triangulate_on_conflict (default) the
+    mesh is triangulated in place and re-charted so the count is 0 and the UVs
+    are exact; the result says `triangulated=True`. glTF stores triangles
+    anyway, so for an export target this costs nothing.
     """
     if obj.type != "MESH":
         raise TypeError(f"uv_unwrap needs a MESH, got {obj.type} ({obj.name})")
@@ -99,44 +101,52 @@ def uv_unwrap(obj, method="smart", angle_limit_deg=66.0, island_margin=0.02,
         bpy.ops.object.mode_set(mode="OBJECT")
         info["loop_conflicts"] = 0
     else:
-        import xatlas
-        me.calc_loop_triangles()
-        nv = len(me.vertices)
-        verts = np.empty(nv * 3, dtype=np.float32)
-        me.vertices.foreach_get("co", verts)
-        verts = verts.reshape(-1, 3)
-        nt = len(me.loop_triangles)
-        tri_v = np.empty(nt * 3, dtype=np.int32)
-        tri_l = np.empty(nt * 3, dtype=np.int32)
-        me.loop_triangles.foreach_get("vertices", tri_v)
-        me.loop_triangles.foreach_get("loops", tri_l)
-        tri_v = tri_v.reshape(-1, 3)
-        tri_l = tri_l.reshape(-1, 3)
-        atlas = xatlas.Atlas()
-        atlas.add_mesh(verts, tri_v.astype(np.uint32))
-        pack = xatlas.PackOptions()
-        pack.padding = max(1, int(round(island_margin * 64)))
-        atlas.generate(pack_options=pack)
-        vmap, idx, uvs = atlas.get_mesh(0)
-        loop_uv = np.full((len(me.loops), 2), np.nan, dtype=np.float32)
-        conflicts = 0
-        flat_l = tri_l.reshape(-1)
-        flat_uv = uvs[idx.reshape(-1)]
-        for li, uv in zip(flat_l, flat_uv):
-            cur = loop_uv[li]
-            if np.isnan(cur[0]):
-                loop_uv[li] = uv
-            elif abs(cur[0] - uv[0]) > 1e-6 or abs(cur[1] - uv[1]) > 1e-6:
-                conflicts += 1
-        loop_uv = np.nan_to_num(loop_uv, nan=0.0)
-        uvl.data.foreach_set("uv", loop_uv.reshape(-1))
+        conflicts = _xatlas_unwrap(me, uvl, island_margin, info)
+        if conflicts and triangulate_on_conflict:
+            import bmesh
+            bm = bmesh.new()
+            bm.from_mesh(me)
+            bmesh.ops.triangulate(bm, faces=bm.faces[:])
+            bm.to_mesh(me)
+            bm.free()
+            uvl = me.uv_layers[uv_name]
+            info["conflicts_before_triangulate"] = int(conflicts)
+            conflicts = _xatlas_unwrap(me, uvl, island_margin, info)
+            info["triangulated"] = True
+            info["faces"] = len(me.polygons)
         info["loop_conflicts"] = int(conflicts)
-        info["charts"] = int(atlas.chart_count)
-        info["atlas_size"] = (int(atlas.width), int(atlas.height))
     me.update()
     info["seconds"] = round(time.time() - t, 4)
     info["uv_layer"] = uv_name
     return info
+
+
+def _xatlas_unwrap(me, uvl, island_margin, info):
+    """Chart + pack with xatlas and write per-loop UVs. Returns loop conflicts."""
+    import xatlas
+    me.calc_loop_triangles()
+    verts = np.empty(len(me.vertices) * 3, dtype=np.float32)
+    me.vertices.foreach_get("co", verts)
+    nt = len(me.loop_triangles)
+    tri_v = np.empty(nt * 3, dtype=np.int32)
+    tri_l = np.empty(nt * 3, dtype=np.int32)
+    me.loop_triangles.foreach_get("vertices", tri_v)
+    me.loop_triangles.foreach_get("loops", tri_l)
+    atlas = xatlas.Atlas()
+    atlas.add_mesh(verts.reshape(-1, 3), tri_v.reshape(-1, 3).astype(np.uint32))
+    pack = xatlas.PackOptions()
+    pack.padding = max(1, int(round(island_margin * 64)))
+    atlas.generate(pack_options=pack)
+    _vmap, idx, uvs = atlas.get_mesh(0)
+    corner_uv = uvs[idx.reshape(-1)].astype(np.float32)
+    loop_uv = np.zeros((len(me.loops), 2), dtype=np.float32)
+    # fancy assignment keeps the LAST write; reversed, the first corner wins
+    loop_uv[tri_l[::-1]] = corner_uv[::-1]
+    conflicts = int((np.abs(loop_uv[tri_l] - corner_uv).max(axis=1) > 1e-6).sum())
+    uvl.data.foreach_set("uv", loop_uv.reshape(-1))
+    info["charts"] = int(atlas.chart_count)
+    info["atlas_size"] = (int(atlas.width), int(atlas.height))
+    return conflicts
 
 
 # ----------------------------------------------------------------- bake
