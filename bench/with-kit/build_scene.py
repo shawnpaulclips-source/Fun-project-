@@ -120,19 +120,21 @@ def build_plumber(name, shirt, hat, h_target, le=0.0, w=1.0):
     # --- head
     pr(ball(f"{name}_head", (0.005, 0, Z_HEAD + 0.030), 0.142, scale=(1.05, 0.97, 1.00),
             mat=P["skin"], seg=20, rings=14), "head")
-    pr(ball(f"{name}_nose", (0.132, 0, Z_HEAD + 0.012), 0.068,
+    pr(ball(f"{name}_nose", (0.152, 0, Z_HEAD + 0.008), 0.074,
             scale=(1.15, 1.0, 1.0), mat=P["skin"], seg=12, rings=8), "head")
     for sg in (1, -1):
-        pr(box(f"{name}_mous{sg}", (0.112, sg * 0.040, Z_HEAD - 0.042),
-               (0.110, 0.080, 0.042), mat=P["hair"], bevel=0.012), "head")
-        pr(ball(f"{name}_eyew{sg}", (0.110, sg * 0.046, Z_HEAD + 0.082), 0.036,
-                scale=(0.55, 1.0, 1.30), mat=P["white"], seg=10, rings=8), "head")
-        pr(ball(f"{name}_eyep{sg}", (0.134, sg * 0.046, Z_HEAD + 0.080), 0.019,
-                scale=(0.6, 1.0, 1.1), mat=P["black"], seg=8, rings=6), "head")
-        pr(ball(f"{name}_ear{sg}", (-0.030, sg * 0.136, Z_HEAD + 0.020), 0.040,
-                scale=(1.0, 0.6, 1.1), mat=P["skin"], seg=10, rings=8), "head")
-        pr(ball(f"{name}_sideb{sg}", (-0.062, sg * 0.108, Z_HEAD - 0.020), 0.048,
-                scale=(1.0, 0.7, 0.9), mat=P["hair"], seg=10, rings=8), "head")
+        pr(box(f"{name}_mous{sg}", (0.122, sg * 0.055, Z_HEAD - 0.040),
+               (0.135, 0.110, 0.048), mat=P["hair"], bevel=0.014), "head")
+        # eyes ride the SIDE of the skull: the whole film is shot in profile and
+        # a front-mounted eye is invisible from the camera plane.
+        pr(ball(f"{name}_eyew{sg}", (0.082, sg * 0.100, Z_HEAD + 0.078), 0.042,
+                scale=(0.72, 0.70, 1.28), mat=P["white"], seg=10, rings=8), "head")
+        pr(ball(f"{name}_eyep{sg}", (0.112, sg * 0.104, Z_HEAD + 0.074), 0.022,
+                scale=(0.7, 0.7, 1.1), mat=P["black"], seg=8, rings=6), "head")
+        pr(ball(f"{name}_ear{sg}", (-0.060, sg * 0.132, Z_HEAD + 0.010), 0.030,
+                scale=(1.0, 0.55, 1.1), mat=P["skin"], seg=10, rings=8), "head")
+        pr(ball(f"{name}_sideb{sg}", (-0.092, sg * 0.092, Z_HEAD - 0.030), 0.046,
+                scale=(0.9, 0.75, 0.9), mat=P["hair"], seg=10, rings=8), "head")
     # --- cap: lathed crown + brim + emblem
     pr(lathe(f"{name}_crown", (0.005, 0, Z_CAP + 0.028),
              [(0.000, 0.112), (0.060, 0.104), (0.104, 0.074),
@@ -194,12 +196,12 @@ def build_koopa(name):
     pr(cyl(f"{name}_beak", (0.225, 0, 0.345), 0.062, 0.105, rot=(0, R(90), 0),
            r2=0.012, mat=P["beak"], seg=12, bevel=0.0), "head")
     for sg in (1, -1):
-        pr(ball(f"{name}_eyew{sg}", (0.145, sg * 0.056, 0.420), 0.040,
+        pr(ball(f"{name}_eyew{sg}", (0.128, sg * 0.088, 0.428), 0.044,
                 scale=(0.8, 1.0, 1.15), mat=P["white"], seg=10, rings=8), "eye")
-        pr(ball(f"{name}_eyep{sg}", (0.176, sg * 0.058, 0.418), 0.020,
+        pr(ball(f"{name}_eyep{sg}", (0.158, sg * 0.094, 0.426), 0.022,
                 mat=P["black"], seg=8, rings=6), "eye")
         for rr in (35, -35):
-            pr(box(f"{name}_x{sg}_{rr}", (0.172, sg * 0.058, 0.420),
+            pr(box(f"{name}_x{sg}_{rr}", (0.150, sg * 0.098, 0.428),
                    (0.016, 0.014, 0.105), rot=(0, R(rr), 0),
                    mat=P["black"], bevel=0.0), "xeye")
     rig, body = rg.build()
