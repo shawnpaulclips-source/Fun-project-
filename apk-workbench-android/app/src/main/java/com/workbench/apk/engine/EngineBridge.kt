@@ -89,6 +89,13 @@ object EngineBridge {
         runCatching {
             argsClass.getMethod("setShowInconsistentCode", Boolean::class.javaPrimitiveType).invoke(args, true)
         }
+        // Single-threaded + no debug info: much lower peak memory on a phone.
+        runCatching {
+            argsClass.getMethod("setThreadsCount", Int::class.javaPrimitiveType).invoke(args, 1)
+        }
+        runCatching {
+            argsClass.getMethod("setDebugInfo", Boolean::class.javaPrimitiveType).invoke(args, false)
+        }
         val decompilerClass = Class.forName("jadx.api.JadxDecompiler")
         val jadx = decompilerClass.getConstructor(argsClass).newInstance(args)
         try {
@@ -126,6 +133,37 @@ object EngineBridge {
                 zf.getInputStream(e).use { it.copyTo(dst.outputStream()) }
             }
         }
+    }
+
+    // ---- harvest native libs + IL2CPP metadata from every APK ----------------------
+    // Guarantees lib/*.so, global-metadata.dat and Unity Managed DLLs land in the dump,
+    // even when the split that holds them wasn't folded into the merged APK.
+    fun harvestNative(apks: List<File>, rawDir: File): Int {
+        rawDir.mkdirs()
+        var count = 0
+        for (apk in apks) {
+            if (!apk.isFile) continue
+            runCatching {
+                ZipFile(apk).use { zf ->
+                    val en = zf.entries()
+                    while (en.hasMoreElements()) {
+                        val e = en.nextElement()
+                        if (e.isDirectory) continue
+                        val n = e.name
+                        val wanted = n.startsWith("lib/") ||
+                            n.endsWith("global-metadata.dat") ||
+                            n.contains("assets/bin/Data/Managed/")
+                        if (!wanted) continue
+                        val dst = File(rawDir, n)
+                        if (dst.isFile && dst.length() == e.size) continue  // already have it
+                        dst.parentFile?.mkdirs()
+                        zf.getInputStream(e).use { it.copyTo(dst.outputStream()) }
+                        count++
+                    }
+                }
+            }
+        }
+        return count
     }
 
     // ---- rebuild: reassemble edited smali, swap dex into the apk, sign --------------

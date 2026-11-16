@@ -43,6 +43,8 @@ data class Progress(
  * call each library's primary documented API; pin the versions in app/build.gradle.kts
  * on first Gradle sync. IL2CPP C# stubs are a PC-only stage (Il2CppDumper is .NET).
  */
+private const val JADX_DEX_LIMIT = 40_000_000L  // skip on-device jadx above this much dex
+
 class Workbench(private val context: Context) {
 
     private val engineSigns = listOf(
@@ -90,7 +92,9 @@ class Workbench(private val context: Context) {
 
             // 3. ENGINE
             set(Stage.ENGINE, StageStatus.RUNNING); emit(snapshot())
-            val engine = fingerprint(merged)
+            val allApks = (apkDir.listFiles()?.toList() ?: emptyList()) + merged
+            val engine = fingerprint(allApks)
+            val dexBytes = totalDexBytes(listOf(merged))
             say("engine: $engine")
             if (engine == "unity-il2cpp") say("note: IL2CPP C# stubs need the PC tool (Il2CppDumper is .NET)")
             set(Stage.ENGINE, StageStatus.DONE, engine); emit(snapshot(engine = engine))
@@ -106,18 +110,39 @@ class Workbench(private val context: Context) {
             say("smali: $dexCount dex disassembled")
             set(Stage.SMALI, StageStatus.DONE, "$dexCount dex"); emit(snapshot(engine = engine))
 
-            // 5. JAVA — jadx reconstruction, read-only reference.
+            // 5. JAVA — jadx reconstruction, read-only reference. Best-effort: never let
+            // it kill the run. jadx holds every class in memory, so a huge app (TikTok:
+            // hundreds of MB of dex) would OOM the process mid-decompile. Skip those; the
+            // smali + resources + dump are the real output and are already done/next.
             set(Stage.JAVA, StageStatus.RUNNING); emit(snapshot(engine = engine))
             val javaDir = File(out, "java").apply { mkdirs() }
-            val javaFiles = EngineBridge.jadx(merged, javaDir)
-            say("java: $javaFiles files (reference only, does not recompile)")
-            set(Stage.JAVA, StageStatus.DONE, "$javaFiles files"); emit(snapshot(engine = engine))
+            if (dexBytes > JADX_DEX_LIMIT) {
+                val mb = dexBytes / 1_000_000
+                say("java: skipped — ${mb}MB of dex is too large for on-device jadx (use jadx on a PC)")
+                set(Stage.JAVA, StageStatus.SKIPPED, "too large (${mb}MB dex)"); emit(snapshot(engine = engine))
+            } else {
+                try {
+                    val javaFiles = EngineBridge.jadx(merged, javaDir)
+                    say("java: $javaFiles files (reference only, does not recompile)")
+                    set(Stage.JAVA, StageStatus.DONE, "$javaFiles files")
+                } catch (t: Throwable) {
+                    javaDir.deleteRecursively()
+                    System.gc()
+                    say("java: skipped — jadx ran out of memory (${t.javaClass.simpleName}); smali is unaffected")
+                    set(Stage.JAVA, StageStatus.SKIPPED, "out of memory")
+                }
+                emit(snapshot(engine = engine))
+            }
 
             // 6. RESOURCES — ARSCLib decodes manifest + resources to editable XML, no aapt2.
             set(Stage.RESOURCES, StageStatus.RUNNING); emit(snapshot(engine = engine))
             val resDir = File(out, "resources").apply { mkdirs() }
             EngineBridge.decodeResources(merged, resDir)
-            say("resources: decoded to ${resDir.name}/")
+            // Native libs + IL2CPP metadata live in the arm64 split; harvest them from every
+            // APK so the dump always carries libil2cpp.so / global-metadata.dat even if the
+            // merge dropped them. That's the exact file set the mod work needs.
+            val harvested = EngineBridge.harvestNative(allApks, File(resDir, "raw"))
+            say("resources: decoded + $harvested native file(s) harvested")
             writeEditMe(out, pkg, engine)
             set(Stage.RESOURCES, StageStatus.DONE); emit(snapshot(engine = engine))
 
@@ -162,14 +187,39 @@ class Workbench(private val context: Context) {
         else -> "native .so are C/C++ and may be obfuscated (e.g. ollvm). No clean source; Ghidra on a PC for disassembly."
     }
 
-    private fun fingerprint(merged: File): String {
-        val names = ArrayList<String>()
-        java.util.zip.ZipFile(merged).use { zf ->
-            val en = zf.entries()
-            while (en.hasMoreElements()) names.add(en.nextElement().name)
+    // Scan every APK (base + splits + merged): native libs live in the arm64 split,
+    // so a merge that drops them would otherwise mis-detect the engine.
+    private fun fingerprint(apks: List<File>): String {
+        val names = HashSet<String>()
+        for (apk in apks) {
+            if (!apk.isFile) continue
+            runCatching {
+                java.util.zip.ZipFile(apk).use { zf ->
+                    val en = zf.entries()
+                    while (en.hasMoreElements()) names.add(en.nextElement().name)
+                }
+            }
         }
-        for ((label, token) in engineSigns) if (names.any { it.contains(token) }) return label
+        for ((label, token) in engineSigns) if (names.any { it.endsWith(token) || it.contains(token) }) return label
         return if (names.any { it.endsWith(".dex") }) "java-kotlin" else "unknown"
+    }
+
+    /** Total size of all classes*.dex across the APKs, to decide if on-device jadx is sane. */
+    private fun totalDexBytes(apks: List<File>): Long {
+        var total = 0L
+        for (apk in apks) {
+            if (!apk.isFile) continue
+            runCatching {
+                java.util.zip.ZipFile(apk).use { zf ->
+                    val en = zf.entries()
+                    while (en.hasMoreElements()) {
+                        val e = en.nextElement()
+                        if (e.name.endsWith(".dex") && !e.name.contains('/')) total += e.size
+                    }
+                }
+            }
+        }
+        return total
     }
 
     private fun writeEditMe(out: File, pkg: String, engine: String) {
