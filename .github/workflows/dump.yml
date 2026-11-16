@@ -11,11 +11,6 @@ name: RE Dump (blutter + Ghidra)
 # The push path (committed dump-input/) is for testing from here.
 
 on:
-  push:
-    branches: ["**"]
-    paths:
-      - "dump-input/**"
-      - ".github/workflows/dump.yml"
   release:
     types: [published]
   workflow_dispatch:
