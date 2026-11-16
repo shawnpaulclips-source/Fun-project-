@@ -12,12 +12,20 @@ name: RE Dump (blutter + Ghidra)
 # release after the dump.
 
 on:
+  push:
+    branches: ["**"]
+    paths:
+      - "dump-input/**"
+      - ".github/workflows/dump.yml"
   workflow_dispatch:
     inputs:
       engine_lib:
         description: "Stripped engine .so for Ghidra (in dump-input/lib/arm64-v8a)"
         required: false
         default: "libsupercell_brawlstars.so"
+
+env:
+  ENGINE_LIB: libsupercell_brawlstars.so
 
 jobs:
   dump:
@@ -65,7 +73,7 @@ jobs:
       - name: Ghidra headless pseudocode export of the engine (best effort)
         continue-on-error: true
         run: |
-          ENGINE="$LIBDIR/${{ inputs.engine_lib }}"
+          ENGINE="$LIBDIR/${{ inputs.engine_lib || env.ENGINE_LIB }}"
           if [ ! -f "$ENGINE" ]; then echo "engine lib not found: $ENGINE"; exit 0; fi
           mkdir -p out ghidra_proj scripts
           cat > scripts/ExportC.py <<'PY'
