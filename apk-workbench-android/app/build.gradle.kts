@@ -58,15 +58,15 @@ dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.2")
 
     // --- APK engine (pure-JVM, runs on Dalvik, no root, no native binaries) ---
-    // Resources decode/encode without aapt2:
-    implementation("io.github.reandroid:ARSCLib:1.3.4")
-    // dex <-> smali:
-    implementation("com.android.tools.smali:smali:3.0.5")
-    implementation("com.android.tools.smali:smali-baksmali:3.0.5")
-    implementation("com.android.tools.smali:smali-dexlib2:3.0.5")
-    // Java reconstruction (read-only view):
-    implementation("io.github.skylot:jadx-core:1.5.1")
-    implementation("io.github.skylot:jadx-dex-input:1.5.1")
-    // APK v1/v2/v3 signing:
-    implementation("com.android.tools.build:apksig:8.5.2")
+    // Resources decode/encode without aapt2 (Maven Central):
+    implementation("io.github.reandroid:ARSCLib:1.4.0")
+    // dex <-> smali (Google Maven; baksmali + smali + dexlib2 fork):
+    implementation("com.android.tools.smali:smali:3.0.10")
+    implementation("com.android.tools.smali:smali-baksmali:3.0.10")
+    implementation("com.android.tools.smali:smali-dexlib2:3.0.10")
+    // Java reconstruction, read-only view (Maven Central):
+    implementation("io.github.skylot:jadx-core:1.5.6")
+    implementation("io.github.skylot:jadx-dex-input:1.5.6")
+    // APK v1/v2/v3 signing (Maven Central):
+    implementation("com.android.tools.build:apksig:2.3.0")
 }
