@@ -16,31 +16,22 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Surface
+import android.os.Build
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import com.workbench.apk.engine.PipelineBus
 import com.workbench.apk.engine.Prefs
-import com.workbench.apk.engine.Progress
-import com.workbench.apk.engine.Workbench
+import com.workbench.apk.engine.RunState
 import com.workbench.apk.ui.DoneScreen
 import com.workbench.apk.ui.PickerScreen
 import com.workbench.apk.ui.PipelineScreen
 import com.workbench.apk.ui.WorkbenchTheme
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.launch
-
-private sealed interface UiState {
-    data object Picker : UiState
-    data class Running(val pkg: String, val label: String, val progress: Progress?) : UiState
-    data class Done(val label: String, val progress: Progress) : UiState
-}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -53,9 +44,8 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun Root() {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val prefs = remember { Prefs(context) }
-    var state by remember { mutableStateOf<UiState>(UiState.Picker) }
+    val run by PipelineBus.state.collectAsState()
     var singleZip by remember { mutableStateOf(prefs.singleZip) }
     var treeUri by remember { mutableStateOf(prefs.treeUri) }
     var folderName by remember { mutableStateOf(treeUri?.let { folderLabel(it) }) }
@@ -74,44 +64,40 @@ private fun Root() {
         }
     }
 
+    // Notification permission (Android 13+) so the background-progress notification shows.
+    val askNotif = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
+    fun launch(app: com.workbench.apk.engine.InstalledApp) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            askNotif.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+        DecompileService.start(context, app.packageName, app.label, singleZip, treeUri)
+    }
+
     AnimatedContent(
-        targetState = state,
+        targetState = run,
         transitionSpec = {
             (fadeIn() togetherWith fadeOut()).using(SizeTransform(clip = false))
         },
         label = "screen",
     ) { s ->
         when (s) {
-            is UiState.Picker -> PickerScreen(
+            is RunState.Idle -> PickerScreen(
                 modifier = Modifier.padding(),
                 folderName = folderName,
                 singleZip = singleZip,
                 onPickFolder = { pickFolder.launch(null) },
                 onUseDownloads = { prefs.treeUri = null; treeUri = null; folderName = null },
                 onToggleSingle = { singleZip = it; prefs.singleZip = it },
-                onPick = { app ->
-                    state = UiState.Running(app.packageName, app.label, null)
-                    val oneZip = singleZip
-                    val dest = treeUri
-                    scope.launch {
-                        Workbench(context).run(app.packageName, oneZip, dest)
-                            .flowOn(Dispatchers.IO)   // heavy pull/decompile off the UI thread
-                            .catch { /* surfaced in the stage list as FAILED */ }
-                            .collect { p ->
-                                state = if (p.finished)
-                                    UiState.Done(app.label, p)
-                                else
-                                    UiState.Running(app.packageName, app.label, p)
-                            }
-                    }
-                },
+                onPick = { app -> launch(app) },
             )
-            is UiState.Running -> PipelineScreen(label = s.label, progress = s.progress)
-            is UiState.Done -> DoneScreen(
+            is RunState.Running -> PipelineScreen(label = s.label, progress = s.progress)
+            is RunState.Done -> DoneScreen(
                 label = s.label,
                 progress = s.progress,
-                onBack = { state = UiState.Picker },
+                onBack = { PipelineBus.state.value = RunState.Idle },
             )
+            is RunState.Failed -> PipelineScreen(label = s.label, progress = null)
         }
     }
 }

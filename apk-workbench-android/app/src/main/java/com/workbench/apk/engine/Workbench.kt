@@ -153,6 +153,15 @@ class Workbench(private val context: Context) {
         }
     }
 
+    /** Honest, per-engine note on what the native layer is and how to actually read it. */
+    private fun nativeNote(engine: String): String = when (engine) {
+        "unity-il2cpp" -> "libil2cpp.so holds the logic (IL2CPP). Offsets via Il2CppDumper on a PC; patch bytes, no C# source."
+        "unity-mono" -> "real C# DLLs under assets/bin/Data/Managed/ — decompile with ILSpy/dnSpy."
+        "flutter" -> "Dart is AOT-compiled into libapp.so (not Java). jadx can't read it; use blutter on a PC for annotated asm."
+        "react-native" -> "JS lives in assets/index.android.bundle — often minified; a JS beautifier makes it readable."
+        else -> "native .so are C/C++ and may be obfuscated (e.g. ollvm). No clean source; Ghidra on a PC for disassembly."
+    }
+
     private fun fingerprint(merged: File): String {
         val names = ArrayList<String>()
         java.util.zip.ZipFile(merged).use { zf ->
@@ -176,7 +185,7 @@ class Workbench(private val context: Context) {
 
             READ-ONLY REFERENCE (does NOT recompile):
               java/         jadx reconstruction. Read it to understand the smali.
-              ${if (engine.startsWith("unity")) "native logic lives in libil2cpp.so; patch bytes, no C# source on-device" else "native: standard .so libs"}
+              ${nativeNote(engine)}
 
             Rebuild + sign happens back in the app after you edit (or in the PC tool).
             Your signing key != Play Store key, so uninstall $pkg before installing a rebuild.
