@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compose drives the real theme; this keeps the splash/system bars dark before Compose mounts. -->
+    <style name="Theme.Workbench" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">#0E1013</item>
+        <item name="android:navigationBarColor">#0E1013</item>
+        <item name="android:windowBackground">#0E1013</item>
+    </style>
+</resources>

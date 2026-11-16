@@ -1,0 +1,118 @@
+# apk-workbench
+
+Pull an app off your Android phone over adb, merge the split APKs, decompile it
+(apktool, jadx, and Il2CppDumper for Unity IL2CPP), clean the output, rebuild it,
+decompile the rebuilt APK again to check it survived, then pack the result into
+zip parts that are each under 30 MB.
+
+Runs on the PC the phone is plugged into. apktool, jadx and Il2CppDumper need a
+desktop. Stdlib Python only.
+
+## Setup (one time)
+
+1. **Phone:** Settings → About phone → tap Build number 7 times. Developer options →
+   USB debugging on. Plug in, accept the RSA prompt.
+2. **Engines** go in `apk-workbench/tools/`:
+   - `platform-tools/` (adb), from developer.android.com/tools/releases/platform-tools
+   - `apktool.jar`, from github.com/iBotPeaches/Apktool/releases
+   - `jadx/` (unzip the release), from github.com/skylot/jadx/releases
+   - `APKEditor.jar`, from github.com/REAndroid/APKEditor/releases
+   - `Il2CppDumper/` (the `Il2CppDumper.dll` build), from github.com/Perfare/Il2CppDumper/releases.
+     Needs the .NET runtime (`dotnet`) on PATH. Optional, only for Unity IL2CPP apps.
+3. Copy `workbench.example.json` to `workbench.json` and fix paths if you put things elsewhere.
+4. Check the setup:
+   ```
+   python workbench.py check
+   ```
+
+## Use
+
+```
+python workbench.py detect            # print the app currently on screen
+python workbench.py list              # all third-party packages
+python workbench.py run --auto        # grab whatever app is open on the phone
+python workbench.py run -p brawl      # or match by name
+```
+
+**Auto-detect:** open Brawl Stars on the phone, then `run --auto` reads dumpsys and
+grabs the foreground app. No typing the package name. Without `--auto` it matches `-p`
+or shows a numbered list.
+
+When it finishes it drops the zip parts into a dedicated folder it creates under your
+Downloads: `Downloads/apk-workbench/<package>/`. Pass `-o <folder>` to send them
+somewhere else. Pass `--force` to redo every stage. Pass `--native` to also export
+readable native pseudocode with Ghidra (slow; needs `ghidra_home` set). Stages are
+cached under `work/<package>/.stamps`, so a rerun skips finished work.
+
+That folder, with every `*_part*.zip` in it, is what you hand back to add features to.
+
+## Edit and rebuild (the part that round-trips)
+
+After a run, `work/<package>/out/EDIT_ME.txt` tells you exactly which tree is editable.
+Short version:
+
+- **Edit** `out/apktool/smali*/` and `out/apktool/res/`. This is Dalvik bytecode and
+  resources, and it rebuilds perfectly.
+- **Read only** `out/jadx/sources/` (Java reconstruction, does not recompile) and the
+  IL2CPP dump (stubs, not source).
+
+Rebuild an installable APK from your edited tree:
+
+```
+python workbench.py rebuild "work/com.supercell.brawlstars/out/apktool" -o rebuilt.apk
+adb uninstall com.supercell.brawlstars     # your key != Play Store key, so uninstall first
+adb install -r rebuilt.apk
+```
+
+`rebuild` runs `apktool b`, then zipalign, then apksigner (v1+v2+v3) if you've set those
+up. Uninstalling drops the app's local data, so back up a save first if it isn't cloud-synced.
+
+Output in the chosen folder:
+
+- `<package>_part01.zip`, `_part02.zip`, … each under 25 MB target, 30 MB hard cap
+- Part 01 holds `MANIFEST.json` and `REASSEMBLE.txt`
+
+Put every part here, then rebuild the tree with:
+
+```
+python workbench.py unpack <folder with the parts> <output folder>
+```
+
+## Signing the rebuilt APK
+
+Rebuilt APKs are unsigned unless you set them up. Create your own key once:
+
+```
+keytool -genkeypair -v -keystore workbench.keystore -alias workbench -keyalg RSA -keysize 2048 -validity 10000
+```
+
+Put the path in `workbench.json` as `keystore`, the alias as `key_alias`, and the path to
+`apksigner` (from Android build-tools) as `apksigner`. Set the password in the environment
+for the run, never in the config file:
+
+```
+set APK_KS_PASS=yourpassword        (Windows cmd)
+$env:APK_KS_PASS="yourpassword"     (PowerShell)
+```
+
+## What the stages do
+
+| Stage     | What it does |
+|-----------|--------------|
+| pull      | `pm path` for every split APK, plus OBB if the app has one (best effort) |
+| merge     | APKEditor combines the splits into one APK (single APK is copied as-is) |
+| engine    | fingerprints the APK (Unity IL2CPP/mono, Flutter, React Native, Xamarin, java/kotlin…), writes `engine.json` |
+| decompile | apktool (smali + resources), jadx (Java), Il2CppDumper (IL2CPP stubs), in parallel; writes `EDIT_ME.txt` |
+| native    | optional (`--native`): Ghidra headless exports C pseudocode for `libil2cpp.so` |
+| cleanup   | removes junk files, apktool's build dir, and jadx resource copies that match apktool's, writes `cleanup_report.json` |
+| rebuild   | `apktool b` → zipalign → apksigner (v1+v2+v3) if configured |
+| verify    | decompiles the rebuilt APK with jadx and compares Java file and warning counts, writes `verify_report.json` |
+| pack      | greedy split into zip parts, big files cut into `.partNNN` pieces with sha256 in the manifest |
+
+## Limits
+
+- IL2CPP games (Unity) don't give back readable C#. The IL2CPP output is Il2CppDumper's
+  stubs: class, field and method names and signatures, not bodies.
+- Packing compresses everything, so a large app takes a few minutes to pack.
+- Rebuilt apps are not guaranteed to run. apktool round trips usually work for smali and
+  resources. Native libs and dex are copied as-is.
