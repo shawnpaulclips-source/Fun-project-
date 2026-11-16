@@ -15,6 +15,7 @@ import concurrent.futures as cf
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -57,9 +58,23 @@ DEFAULTS = {
     "il2cpp_dll": "tools/Il2CppDumper/Il2CppDumper.dll",
     "dotnet": "dotnet",
     "apksigner": "",
+    "zipalign": "",
     "keystore": "",
     "key_alias": "",
+    "ghidra_home": "",
 }
+
+# Engine fingerprints, checked against the merged APK's entry list in order.
+ENGINE_SIGNS = [
+    ("unity-il2cpp", "libil2cpp.so"),
+    ("unity-mono", "assets/bin/Data/Managed/Assembly-CSharp.dll"),
+    ("unity", "libunity.so"),
+    ("flutter", "libflutter.so"),
+    ("react-native", "index.android.bundle"),
+    ("xamarin", "assemblies/Mono.Android.dll"),
+    ("cocos2d", "libcocos2d"),
+    ("godot", "libgodot_android.so"),
+]
 
 
 # ---------------------------------------------------------------- config / shell
@@ -135,7 +150,38 @@ def list_third_party(cfg: dict, serial: str | None) -> list[str]:
                   for line in out.splitlines() if line.startswith("package:"))
 
 
-def pick_package(cfg: dict, serial: str | None, query: str | None) -> str:
+PKG_COMPONENT = re.compile(r"([a-zA-Z][\w]*(?:\.[a-zA-Z][\w]*)+)/[\w.$]+")
+
+
+def detect_foreground(cfg: dict, serial: str | None) -> str | None:
+    """The package of the app currently on screen. Reads dumpsys, keeps only
+    components whose package is actually third-party installed, so the launcher,
+    SystemUI and the shell itself never win."""
+    installed = set(list_third_party(cfg, serial))
+    for args in (("shell", "dumpsys", "activity", "activities"),
+                 ("shell", "dumpsys", "window", "windows"),
+                 ("shell", "dumpsys", "window")):
+        try:
+            out = adb(cfg, serial, *args, capture=True)
+        except RuntimeError:
+            continue
+        for line in out.splitlines():
+            low = line.lower()
+            if not any(k in low for k in ("resumed", "mcurrentfocus", "mfocusedapp", "topresumed")):
+                continue
+            for pkg in PKG_COMPONENT.findall(line):
+                if pkg in installed:
+                    return pkg
+    return None
+
+
+def pick_package(cfg: dict, serial: str | None, query: str | None, auto: bool) -> str:
+    if auto and not query:
+        fg = detect_foreground(cfg, serial)
+        if fg:
+            print(f"auto-detected foreground app: {fg}")
+            return fg
+        print("auto-detect found nothing on screen; falling back to the list")
     pkgs = list_third_party(cfg, serial)
     if query:
         pkgs = [p for p in pkgs if query.lower() in p.lower()]
@@ -181,6 +227,37 @@ def pull_obb(cfg: dict, serial: str | None, pkg: str, dest: Path) -> list[Path]:
 
 
 # ---------------------------------------------------------------- decompile
+
+def detect_engine(merged: Path) -> dict:
+    """Name the app's engine from what's inside the APK, so you know which tree is
+    the one you can actually edit and rebuild."""
+    with zipfile.ZipFile(merged) as z:
+        names = z.namelist()
+    found = []
+    for label, token in ENGINE_SIGNS:
+        if any(token in n for n in names) and label not in found:
+            found.append(label)
+    has_dex = any(n.endswith(".dex") for n in names)
+    if not found and has_dex:
+        found.append("java-kotlin")
+
+    primary = found[0] if found else "unknown"
+    rebuildable = "smali (apktool tree) — edit and `apktool b` round-trips"
+    if primary in ("unity-il2cpp", "unity"):
+        native = "native: logic is in libil2cpp.so; patch bytes/RVA, no C# source"
+    elif primary == "unity-mono":
+        native = "native: real C# DLLs under assets/bin/Data/Managed (decompile with ILSpy/dnSpy)"
+    else:
+        native = "native: none detected, or standard .so libs"
+
+    return {
+        "engine": primary,
+        "all_signatures": found,
+        "has_dex": has_dex,
+        "editable_rebuildable": rebuildable,
+        "native_note": native,
+    }
+
 
 def merge_apks(cfg: dict, apks: list[Path], out_apk: Path) -> None:
     if out_apk.exists():
@@ -291,23 +368,87 @@ def cleanup(out: Path) -> dict:
     return report
 
 
-def rebuild(cfg: dict, out: Path) -> Path:
-    rb = out / "rebuilt"
-    shutil.rmtree(rb, ignore_errors=True)
-    rb.mkdir(parents=True)
-    unsigned = rb / "unsigned.apk"
-    sh([cfg["java"], "-jar", cfg["apktool_jar"], "b", "-f", out / "apktool", "-o", unsigned])
-    signed = rb / "rebuilt.apk"
+def run_ghidra(cfg: dict, merged: Path, out: Path, workdir: Path) -> None:
+    """Optional. Export readable C pseudocode for libil2cpp.so with Ghidra headless.
+    Slow (tens of minutes on a real game lib) but it's the only way to get native
+    logic you can read. If Il2CppDumper produced a Ghidra script, it's applied first
+    so functions carry their real names."""
+    ghidra = cfg["ghidra_home"]
+    headless = Path(ghidra) / "support" / ("analyzeHeadless.bat" if os.name == "nt" else "analyzeHeadless")
+    if not ghidra or not headless.exists():
+        print("  native: ghidra_home not set or analyzeHeadless missing, skipped")
+        return
+    staging = workdir / "il2cpp_in"
+    lib = extract_first([merged], "libil2cpp.so", "arm64-v8a", staging)
+    if lib is None:
+        print("  native: no libil2cpp.so, skipped")
+        return
+    nat = out / "native"
+    nat.mkdir(parents=True, exist_ok=True)
+    postscript = nat / "_export_pseudocode.py"
+    postscript.write_text(
+        "# Ghidra postscript: dump decompiled C for every function.\n"
+        "from ghidra.app.decompiler import DecompInterface\n"
+        "from ghidra.util.task import ConsoleTaskMonitor\n"
+        "import os\n"
+        "ifc = DecompInterface(); ifc.openProgram(currentProgram)\n"
+        "out = os.path.join(os.environ['GHIDRA_OUT'], 'libil2cpp.c')\n"
+        "mon = ConsoleTaskMonitor()\n"
+        "with open(out, 'w') as f:\n"
+        "    for fn in currentProgram.getFunctionManager().getFunctions(True):\n"
+        "        r = ifc.decompileFunction(fn, 60, mon)\n"
+        "        if r and r.decompiledFunction:\n"
+        "            f.write(r.decompiledFunction.getC())\n"
+        "            f.write('\\n')\n",
+        encoding="utf-8")
+    proj = nat / "ghidra_proj"
+    proj.mkdir(exist_ok=True)
+    env_out = str(nat)
+    cmd = [str(headless), str(proj), "wb", "-import", str(lib),
+           "-scriptPath", str(nat), "-postScript", postscript.name, "-deleteProject"]
+    il2cpp_script = out / "il2cpp" / "script.json"
+    if il2cpp_script.exists():
+        print("  native: Il2CppDumper script.json present; name it in Ghidra's GUI with the bundled script for named functions")
+    env = dict(os.environ, GHIDRA_OUT=env_out)
+    print("  native: running Ghidra headless (this takes a while)")
+    subprocess.run([str(c) for c in cmd], env=env, capture_output=True, text=True)
+    produced = nat / "libil2cpp.c"
+    print(f"  native: {'wrote ' + str(produced) if produced.exists() else 'Ghidra produced no output'}")
+
+
+def _align_and_sign(cfg: dict, unsigned: Path, signed: Path) -> str:
+    """zipalign then apksigner (v1+v2+v3). Returns a one-line status."""
+    staged = unsigned
+    if cfg["zipalign"] and shutil.which(cfg["zipalign"]):
+        aligned = unsigned.with_name("aligned.apk")
+        sh([cfg["zipalign"], "-p", "-f", "4", unsigned, aligned])
+        staged = aligned
     if cfg["apksigner"] and cfg["keystore"]:
-        # Password comes from the APK_KS_PASS environment variable, never from the config file.
+        # Password comes from the APK_KS_PASS environment variable, never the config file.
         sh([cfg["apksigner"], "sign", "--ks", cfg["keystore"], "--ks-key-alias", cfg["key_alias"],
-            "--ks-pass", "env:APK_KS_PASS", "--out", signed, unsigned])
-        print("  rebuild: signed with your keystore")
-    else:
-        shutil.copy2(unsigned, signed)
-        print("  rebuild: left unsigned (set apksigner and keystore in workbench.json to sign)")
-    unsigned.unlink()
+            "--ks-pass", "env:APK_KS_PASS",
+            "--v1-signing-enabled", "true", "--v2-signing-enabled", "true",
+            "--v3-signing-enabled", "true", "--out", signed, staged])
+        sh([cfg["apksigner"], "verify", "--print-certs", signed], capture=True)
+        return "aligned and signed (v1+v2+v3), signature verified"
+    shutil.copy2(staged, signed)
+    return "left unsigned (set zipalign, apksigner and keystore in workbench.json to get an installable APK)"
+
+
+def build_apk(cfg: dict, apktool_dir: Path, signed: Path) -> Path:
+    """apktool b from an edited smali tree, then align and sign."""
+    signed.parent.mkdir(parents=True, exist_ok=True)
+    unsigned = signed.with_name("unsigned.apk")
+    sh([cfg["java"], "-jar", cfg["apktool_jar"], "b", "-f", apktool_dir, "-o", unsigned])
+    status = _align_and_sign(cfg, unsigned, signed)
+    for scratch in (unsigned, unsigned.with_name("aligned.apk")):
+        scratch.unlink(missing_ok=True)
+    print(f"  rebuild: {status}")
     return signed
+
+
+def rebuild(cfg: dict, out: Path) -> Path:
+    return build_apk(cfg, out / "apktool", out / "rebuilt" / "rebuilt.apk")
 
 
 def count_java(tree: Path) -> tuple[int, int]:
@@ -483,8 +624,12 @@ def check_tools(cfg: dict) -> tuple[list[str], list[str]]:
         optional.append(f"il2cpp_dll: {cfg['il2cpp_dll']} (Unity IL2CPP dump will be skipped)")
     if not shutil.which(cfg["dotnet"]):
         optional.append("dotnet: not found (needed for the IL2CPP dump)")
+    if not (cfg["zipalign"] and (shutil.which(cfg["zipalign"]) or Path(cfg["zipalign"]).exists())):
+        optional.append("zipalign: not set (rebuilt APK won't be aligned; apksigner may reject it)")
     if not (cfg["apksigner"] and cfg["keystore"]):
-        optional.append("apksigner/keystore: not set (rebuilt APK will be unsigned)")
+        optional.append("apksigner/keystore: not set (rebuilt APK will be unsigned and won't install)")
+    if not cfg["ghidra_home"]:
+        optional.append("ghidra_home: not set (--native pseudocode export will be skipped)")
     return missing, optional
 
 
@@ -516,7 +661,7 @@ def run_pipeline(args: argparse.Namespace) -> None:
         print(f"note     {o}")
 
     serial = args.device
-    pkg = pick_package(cfg, serial, args.package)
+    pkg = pick_package(cfg, serial, args.package, args.auto)
     work = Path(args.work).resolve() / pkg
     work.mkdir(parents=True, exist_ok=True)
     st = Stamps(work, args.force)
@@ -541,12 +686,39 @@ def run_pipeline(args: argparse.Namespace) -> None:
         merge_apks(cfg, apks, merged)
         st.mark("merge")
 
+    engine = detect_engine(merged)
+    print(f"engine: {engine['engine']}  (signatures: {', '.join(engine['all_signatures']) or 'none'})")
+
     if st.done("decompile"):
         print("decompile: cached")
     else:
         print("decompile: apktool + jadx + il2cpp")
         decompile(cfg, merged, out, obbs, work)
+        (out / "engine.json").write_text(json.dumps(engine, indent=1), encoding="utf-8")
+        (out / "EDIT_ME.txt").write_text(
+            "WHERE TO EDIT\n"
+            "=============\n"
+            f"engine: {engine['engine']}\n\n"
+            "EDIT AND REBUILD (round-trips perfectly):\n"
+            "  out/apktool/smali*/   <- Dalvik bytecode. Edit here. `workbench.py rebuild` turns\n"
+            "                           it back into an installable APK.\n"
+            "  out/apktool/res/      <- resources, layouts, strings. Editable, rebuilds.\n"
+            "  out/apktool/AndroidManifest.xml\n\n"
+            "READ-ONLY REFERENCE (does NOT recompile):\n"
+            "  out/jadx/sources/     <- Java reconstruction. Read it to understand the smali.\n"
+            f"  {engine['native_note']}\n\n"
+            "After editing smali, from the apk-workbench folder:\n"
+            f"  python workbench.py rebuild \"{(out / 'apktool')}\" -o rebuilt.apk\n"
+            "Then on the device (uninstall first; your key != Play Store key):\n"
+            f"  adb uninstall {pkg}\n"
+            "  adb install -r rebuilt.apk\n",
+            encoding="utf-8")
         st.mark("decompile")
+
+    if args.native and not st.done("native"):
+        print("native: Ghidra pseudocode export")
+        run_ghidra(cfg, merged, out, work)
+        st.mark("native")
 
     if st.done("cleanup"):
         print("cleanup: cached")
@@ -594,13 +766,23 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("check", help="show missing engine paths")
     sub.add_parser("list", help="list third-party packages on the device")
+    d = sub.add_parser("detect", help="print the app currently on screen")
+    d.add_argument("-s", "--device", help="adb serial when more than one device is attached")
 
     r = sub.add_parser("run", help="pull, decompile, clean, rebuild, verify, pack")
     r.add_argument("-p", "--package", help="package name or a part of it, e.g. brawl")
+    r.add_argument("--auto", action="store_true",
+                   help="grab whatever app is open on the phone right now")
+    r.add_argument("--native", action="store_true",
+                   help="also export native pseudocode with Ghidra (slow; needs ghidra_home)")
     r.add_argument("-s", "--device", help="adb serial when more than one device is attached")
     r.add_argument("--work", default=str(HERE / "work"), help="scratch folder")
     r.add_argument("-o", "--out", help="folder for the zip parts (folder picker if omitted)")
     r.add_argument("--force", action="store_true", help="redo every stage")
+
+    b = sub.add_parser("rebuild", help="rebuild an installable APK from an edited apktool tree")
+    b.add_argument("apktool_dir", help="the out/apktool folder you edited")
+    b.add_argument("-o", "--out", default="rebuilt.apk", help="output APK path")
 
     u = sub.add_parser("unpack", help="reassemble zip parts into a folder")
     u.add_argument("parts", help="folder holding the *_part*.zip files")
@@ -621,8 +803,17 @@ def main(argv: list[str] | None = None) -> int:
             for p in list_third_party(load_config(), None):
                 print(p)
             return 0
+        if args.cmd == "detect":
+            fg = detect_foreground(load_config(), args.device)
+            print(fg or "nothing detected on screen")
+            return 0 if fg else 1
         if args.cmd == "run":
             run_pipeline(args)
+            return 0
+        if args.cmd == "rebuild":
+            cfg = load_config()
+            apk = build_apk(cfg, Path(args.apktool_dir), Path(args.out).resolve())
+            print(f"built {apk}")
             return 0
         if args.cmd == "unpack":
             unpack(Path(args.parts), Path(args.dest))

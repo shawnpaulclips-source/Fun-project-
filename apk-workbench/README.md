@@ -28,14 +28,42 @@ desktop. Stdlib Python only.
 ## Use
 
 ```
-python workbench.py list
-python workbench.py run -p brawl
+python workbench.py detect            # print the app currently on screen
+python workbench.py list              # all third-party packages
+python workbench.py run --auto        # grab whatever app is open on the phone
+python workbench.py run -p brawl      # or match by name
 ```
 
-`run` asks you to pick the package if more than one matches, then asks for the folder
-to save into (folder picker, or a prompt if no window is available). Pass `-o <folder>`
-to skip the question. Pass `--force` to redo every stage. Stages are cached under
-`work/<package>/.stamps`, so a rerun skips finished work.
+**Auto-detect:** open Brawl Stars on the phone, then `run --auto` reads dumpsys and
+grabs the foreground app. No typing the package name. Without `--auto` it matches `-p`
+or shows a numbered list.
+
+`run` asks for the folder to save into (folder picker, or a prompt if no window is
+available). Pass `-o <folder>` to skip the question. Pass `--force` to redo every stage.
+Pass `--native` to also export readable native pseudocode with Ghidra (slow; needs
+`ghidra_home` set). Stages are cached under `work/<package>/.stamps`, so a rerun skips
+finished work.
+
+## Edit and rebuild (the part that round-trips)
+
+After a run, `work/<package>/out/EDIT_ME.txt` tells you exactly which tree is editable.
+Short version:
+
+- **Edit** `out/apktool/smali*/` and `out/apktool/res/`. This is Dalvik bytecode and
+  resources, and it rebuilds perfectly.
+- **Read only** `out/jadx/sources/` (Java reconstruction, does not recompile) and the
+  IL2CPP dump (stubs, not source).
+
+Rebuild an installable APK from your edited tree:
+
+```
+python workbench.py rebuild "work/com.supercell.brawlstars/out/apktool" -o rebuilt.apk
+adb uninstall com.supercell.brawlstars     # your key != Play Store key, so uninstall first
+adb install -r rebuilt.apk
+```
+
+`rebuild` runs `apktool b`, then zipalign, then apksigner (v1+v2+v3) if you've set those
+up. Uninstalling drops the app's local data, so back up a save first if it isn't cloud-synced.
 
 Output in the chosen folder:
 
@@ -71,9 +99,11 @@ $env:APK_KS_PASS="yourpassword"     (PowerShell)
 |-----------|--------------|
 | pull      | `pm path` for every split APK, plus OBB if the app has one (best effort) |
 | merge     | APKEditor combines the splits into one APK (single APK is copied as-is) |
-| decompile | apktool (smali + resources), jadx (Java), Il2CppDumper (IL2CPP stubs), in parallel |
+| engine    | fingerprints the APK (Unity IL2CPP/mono, Flutter, React Native, Xamarin, java/kotlin…), writes `engine.json` |
+| decompile | apktool (smali + resources), jadx (Java), Il2CppDumper (IL2CPP stubs), in parallel; writes `EDIT_ME.txt` |
+| native    | optional (`--native`): Ghidra headless exports C pseudocode for `libil2cpp.so` |
 | cleanup   | removes junk files, apktool's build dir, and jadx resource copies that match apktool's, writes `cleanup_report.json` |
-| rebuild   | `apktool b` from the cleaned tree, signed with your key if configured |
+| rebuild   | `apktool b` → zipalign → apksigner (v1+v2+v3) if configured |
 | verify    | decompiles the rebuilt APK with jadx and compares Java file and warning counts, writes `verify_report.json` |
 | pack      | greedy split into zip parts, big files cut into `.partNNN` pieces with sha256 in the manifest |
 

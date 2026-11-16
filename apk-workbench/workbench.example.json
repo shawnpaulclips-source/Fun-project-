@@ -6,7 +6,9 @@
   "apkeditor_jar": "tools/APKEditor.jar",
   "il2cpp_dll": "tools/Il2CppDumper/Il2CppDumper.dll",
   "dotnet": "dotnet",
+  "zipalign": "",
   "apksigner": "",
   "keystore": "",
-  "key_alias": "workbench"
+  "key_alias": "workbench",
+  "ghidra_home": ""
 }
