@@ -56,7 +56,12 @@ class Workbench(private val context: Context) {
         "godot" to "libgodot_android.so",
     )
 
-    fun run(pkg: String, singleZip: Boolean = false, treeUri: android.net.Uri? = null): Flow<Progress> = flow {
+    fun run(
+        pkg: String,
+        singleZip: Boolean = false,
+        treeUri: android.net.Uri? = null,
+        reMode: Boolean = false,
+    ): Flow<Progress> = flow {
         val stages = Stage.values().map { StageState(it) }.toMutableList()
         val log = ArrayList<String>()
         fun snapshot(finished: Boolean = false, dir: String? = null, parts: List<String> = emptyList(), engine: String = "") =
@@ -82,6 +87,50 @@ class Workbench(private val context: Context) {
                 emit(snapshot())
             }
             set(Stage.PULL, StageStatus.DONE, "${apks.size} file(s)"); emit(snapshot())
+
+            // RE-FILES-ONLY MODE — grab exactly what reverse engineering the menu needs
+            // (libil2cpp.so, global-metadata.dat, Managed DLLs, manifest) and skip the
+            // whole decompile. No jadx, so nothing to OOM; output is small and fast.
+            if (reMode) {
+                val srcApks = apkDir.listFiles()?.toList() ?: emptyList()
+                set(Stage.MERGE, StageStatus.SKIPPED, "RE mode")
+                set(Stage.ENGINE, StageStatus.RUNNING); emit(snapshot())
+                val engine = fingerprint(srcApks)
+                say("engine: $engine")
+                set(Stage.ENGINE, StageStatus.DONE, engine)
+                set(Stage.SMALI, StageStatus.SKIPPED, "RE mode")
+                set(Stage.JAVA, StageStatus.SKIPPED, "RE mode")
+                set(Stage.RESOURCES, StageStatus.RUNNING, "grabbing RE files"); emit(snapshot(engine = engine))
+                val out = File(work, "out").apply { mkdirs() }
+                val raw = File(out, "raw")
+                val n = EngineBridge.harvestNative(srcApks, raw)
+                val m = EngineBridge.harvestManifest(srcApks, raw)
+                say("RE files: $n native/metadata + $m manifest(s)")
+                File(out, "RE_FILES.txt").writeText(
+                    "RE extract for $pkg (engine: $engine)\n\n" +
+                        "raw/lib/arm64-v8a/libil2cpp.so  + raw/**/global-metadata.dat are the\n" +
+                        "IL2CPP offset inputs. Managed DLLs (if any) and the binary manifest(s)\n" +
+                        "are here too. No smali/Java — this is the menu/RE file set only.\n"
+                )
+                set(Stage.RESOURCES, StageStatus.DONE, "$n files"); emit(snapshot(engine = engine))
+
+                set(Stage.PACK, StageStatus.RUNNING); emit(snapshot(engine = engine))
+                val name = pkg.replace('.', '_') + "_re"
+                val staging = File(work, "zips").apply { deleteRecursively(); mkdirs() }
+                val meta = JSONObject().apply { put("package", pkg); put("engine", engine); put("re_mode", true) }
+                val parts = if (singleZip)
+                    Packer.packSingle(out, staging, name, meta) { p -> set(Stage.PACK, StageStatus.RUNNING, "writing one zip", p) }
+                else
+                    Packer.pack(out, staging, name, meta) { p -> set(Stage.PACK, StageStatus.RUNNING, "writing parts", p) }
+                set(Stage.PACK, StageStatus.RUNNING, "saving", 0f); emit(snapshot(engine = engine))
+                val dirLabel = Output.publish(context, treeUri, pkg, parts) { p -> set(Stage.PACK, StageStatus.RUNNING, "saving", p) }
+                staging.deleteRecursively()
+                parts.forEach { say("${if (singleZip) "zip" else "part"} ${it.name}  ${"%.1f".format(it.length() / 1e6)} MB") }
+                set(Stage.PACK, StageStatus.DONE, if (singleZip) "one zip" else "${parts.size} part(s)")
+                say("saved to $dirLabel")
+                emit(snapshot(finished = true, dir = dirLabel, parts = parts.map { it.name }, engine = engine))
+                return@flow
+            }
 
             // 2. MERGE — ARSCLib ApkBundle merges split APKs into one module.
             set(Stage.MERGE, StageStatus.RUNNING); emit(snapshot())

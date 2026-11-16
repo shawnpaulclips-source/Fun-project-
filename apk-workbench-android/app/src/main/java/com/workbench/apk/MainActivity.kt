@@ -47,6 +47,7 @@ private fun Root() {
     val prefs = remember { Prefs(context) }
     val run by PipelineBus.state.collectAsState()
     var singleZip by remember { mutableStateOf(prefs.singleZip) }
+    var reMode by remember { mutableStateOf(prefs.reMode) }
     var treeUri by remember { mutableStateOf(prefs.treeUri) }
     var folderName by remember { mutableStateOf(treeUri?.let { folderLabel(it) }) }
 
@@ -71,7 +72,7 @@ private fun Root() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             askNotif.launch(android.Manifest.permission.POST_NOTIFICATIONS)
         }
-        DecompileService.start(context, app.packageName, app.label, singleZip, treeUri)
+        DecompileService.start(context, app.packageName, app.label, singleZip, reMode, treeUri)
     }
 
     AnimatedContent(
@@ -86,9 +87,11 @@ private fun Root() {
                 modifier = Modifier.padding(),
                 folderName = folderName,
                 singleZip = singleZip,
+                reMode = reMode,
                 onPickFolder = { pickFolder.launch(null) },
                 onUseDownloads = { prefs.treeUri = null; treeUri = null; folderName = null },
                 onToggleSingle = { singleZip = it; prefs.singleZip = it },
+                onToggleRe = { reMode = it; prefs.reMode = it },
                 onPick = { app -> launch(app) },
             )
             is RunState.Running -> PipelineScreen(label = s.label, progress = s.progress)

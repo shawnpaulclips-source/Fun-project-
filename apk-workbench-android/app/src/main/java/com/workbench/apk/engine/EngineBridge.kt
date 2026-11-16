@@ -166,6 +166,24 @@ object EngineBridge {
         return count
     }
 
+    /** Copy the binary AndroidManifest.xml out of each APK (base first). Returns the count. */
+    fun harvestManifest(apks: List<File>, rawDir: File): Int {
+        rawDir.mkdirs()
+        var count = 0
+        apks.sortedBy { it.name }.forEachIndexed { i, apk ->
+            if (!apk.isFile) return@forEachIndexed
+            runCatching {
+                ZipFile(apk).use { zf ->
+                    val e = zf.getEntry("AndroidManifest.xml") ?: return@use
+                    val dst = File(rawDir, if (i == 0) "AndroidManifest.xml" else "AndroidManifest_${apk.nameWithoutExtension}.xml")
+                    zf.getInputStream(e).use { it.copyTo(dst.outputStream()) }
+                    count++
+                }
+            }
+        }
+        return count
+    }
+
     // ---- rebuild: reassemble edited smali, swap dex into the apk, sign --------------
     // Robust on-device path: assemble smali -> dex, replace classes*.dex in a copy of
     // the original apk, then apksig signs v1+v2+v3. (Resource re-encode is a PC/APKEditor

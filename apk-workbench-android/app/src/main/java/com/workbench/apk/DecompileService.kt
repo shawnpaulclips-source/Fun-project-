@@ -40,6 +40,7 @@ class DecompileService : Service() {
         if (pkg == null) { stopSelf(); return START_NOT_STICKY }
         val label = intent.getStringExtra(EXTRA_LABEL) ?: pkg
         val single = intent.getBooleanExtra(EXTRA_SINGLE, false)
+        val re = intent.getBooleanExtra(EXTRA_RE, false)
         val tree = intent.getStringExtra(EXTRA_TREE)?.let(Uri::parse)
 
         startForegroundCompat(buildNotification(label, "starting", 0, indeterminate = true))
@@ -48,7 +49,7 @@ class DecompileService : Service() {
 
         scope.launch {
             try {
-                Workbench(applicationContext).run(pkg, single, tree).collect { p ->
+                Workbench(applicationContext).run(pkg, single, tree, re).collect { p ->
                     PipelineBus.state.value =
                         if (p.finished) RunState.Done(label, p) else RunState.Running(pkg, label, p)
                     notify(label, p)
@@ -151,6 +152,7 @@ class DecompileService : Service() {
         const val EXTRA_PKG = "pkg"
         const val EXTRA_LABEL = "label"
         const val EXTRA_SINGLE = "single"
+        const val EXTRA_RE = "re"
         const val EXTRA_TREE = "tree"
 
         fun overallPercent(p: Progress): Int {
@@ -159,11 +161,12 @@ class DecompileService : Service() {
             return (((done + active) / p.stages.size) * 100).toInt().coerceIn(0, 100)
         }
 
-        fun start(context: Context, pkg: String, label: String, single: Boolean, tree: Uri?) {
+        fun start(context: Context, pkg: String, label: String, single: Boolean, re: Boolean, tree: Uri?) {
             val intent = Intent(context, DecompileService::class.java).apply {
                 putExtra(EXTRA_PKG, pkg)
                 putExtra(EXTRA_LABEL, label)
                 putExtra(EXTRA_SINGLE, single)
+                putExtra(EXTRA_RE, re)
                 putExtra(EXTRA_TREE, tree?.toString())
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent)

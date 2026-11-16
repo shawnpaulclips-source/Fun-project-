@@ -15,8 +15,13 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_SINGLE, false)
         set(value) = sp.edit().putBoolean(KEY_SINGLE, value).apply()
 
+    var reMode: Boolean
+        get() = sp.getBoolean(KEY_RE, false)
+        set(value) = sp.edit().putBoolean(KEY_RE, value).apply()
+
     private companion object {
         const val KEY_TREE = "tree_uri"
         const val KEY_SINGLE = "single_zip"
+        const val KEY_RE = "re_mode"
     }
 }

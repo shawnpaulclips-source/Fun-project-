@@ -65,9 +65,11 @@ fun PickerScreen(
     modifier: Modifier = Modifier,
     folderName: String? = null,
     singleZip: Boolean = false,
+    reMode: Boolean = false,
     onPickFolder: () -> Unit = {},
     onUseDownloads: () -> Unit = {},
     onToggleSingle: (Boolean) -> Unit = {},
+    onToggleRe: (Boolean) -> Unit = {},
     onPick: (InstalledApp) -> Unit,
 ) {
     val context = LocalContext.current
@@ -94,9 +96,11 @@ fun PickerScreen(
         SettingsCard(
             folderName = folderName,
             singleZip = singleZip,
+            reMode = reMode,
             onPickFolder = onPickFolder,
             onUseDownloads = onUseDownloads,
             onToggleSingle = onToggleSingle,
+            onToggleRe = onToggleRe,
         )
         Spacer(Modifier.height(12.dp))
 
@@ -180,9 +184,11 @@ private fun AppRow(app: InstalledApp, onClick: () -> Unit) {
 private fun SettingsCard(
     folderName: String?,
     singleZip: Boolean,
+    reMode: Boolean,
     onPickFolder: () -> Unit,
     onUseDownloads: () -> Unit,
     onToggleSingle: (Boolean) -> Unit,
+    onToggleRe: (Boolean) -> Unit,
 ) {
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(GraphiteCard).padding(14.dp),
@@ -233,17 +239,39 @@ private fun SettingsCard(
             Switch(
                 checked = singleZip,
                 onCheckedChange = onToggleSingle,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = Graphite,
-                    checkedTrackColor = Amber,
-                    uncheckedThumbColor = TextMid,
-                    uncheckedTrackColor = GraphiteRaised,
-                    uncheckedBorderColor = Hairline,
-                ),
+                colors = workbenchSwitchColors(),
+            )
+        }
+
+        Spacer(Modifier.height(12.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("RE files only", color = TextHigh, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Medium)
+                Text(
+                    if (reMode) "grab libil2cpp.so + metadata + manifest, skip decompile — fast, no wipe"
+                    else "off = full decompile (smali, Java, resources)",
+                    color = TextMid,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+            Spacer(Modifier.width(10.dp))
+            Switch(
+                checked = reMode,
+                onCheckedChange = onToggleRe,
+                colors = workbenchSwitchColors(),
             )
         }
     }
 }
+
+@Composable
+private fun workbenchSwitchColors() = SwitchDefaults.colors(
+    checkedThumbColor = Graphite,
+    checkedTrackColor = Amber,
+    uncheckedThumbColor = TextMid,
+    uncheckedTrackColor = GraphiteRaised,
+    uncheckedBorderColor = Hairline,
+)
 
 @Composable
 fun Spinner(size: androidx.compose.ui.unit.Dp, color: androidx.compose.ui.graphics.Color = Amber) {
