@@ -106,12 +106,7 @@ class Workbench(private val context: Context) {
                 val n = EngineBridge.harvestNative(srcApks, raw)
                 val m = EngineBridge.harvestManifest(srcApks, raw)
                 say("RE files: $n native/metadata + $m manifest(s)")
-                File(out, "RE_FILES.txt").writeText(
-                    "RE extract for $pkg (engine: $engine)\n\n" +
-                        "raw/lib/arm64-v8a/libil2cpp.so  + raw/**/global-metadata.dat are the\n" +
-                        "IL2CPP offset inputs. Managed DLLs (if any) and the binary manifest(s)\n" +
-                        "are here too. No smali/Java — this is the menu/RE file set only.\n"
-                )
+                File(out, "RE_FILES.txt").writeText(reFilesNote(pkg, engine))
                 set(Stage.RESOURCES, StageStatus.DONE, "$n files"); emit(snapshot(engine = engine))
 
                 set(Stage.PACK, StageStatus.RUNNING); emit(snapshot(engine = engine))
@@ -225,6 +220,24 @@ class Workbench(private val context: Context) {
             emit(snapshot())
             throw e
         }
+    }
+
+    /** Engine-correct RE note: which file is the real RE target and what tool reads it. */
+    private fun reFilesNote(pkg: String, engine: String): String {
+        val target = when (engine) {
+            "unity-il2cpp" -> "TARGET: raw/lib/arm64-v8a/libil2cpp.so + raw/**/global-metadata.dat\n" +
+                "TOOL: Il2CppDumper (PC) -> dump.cs + offsets. This is the easy case: full class/method names."
+            "flutter" -> "TARGET: raw/lib/arm64-v8a/libapp.so (AOT-compiled Dart; the Flutter UI/logic).\n" +
+                "TOOL: blutter (PC) built against the app's Dart version -> annotated asm + names + Frida template.\n" +
+                "Read the Dart/Flutter version string out of libflutter.so first; blutter needs it."
+            "unity-mono" -> "TARGET: raw/assets/bin/Data/Managed/*.dll (real C#).\n" +
+                "TOOL: ILSpy / dnSpy (PC) -> readable C#."
+            else -> "TARGET: the app's main native engine .so (e.g. lib<name>.so).\n" +
+                "TOOL: Ghidra / IDA (PC). If it is stripped (no symbols), this is hand RE — no offset dump exists."
+        }
+        return "RE extract for $pkg\nengine: $engine\n\n$target\n\n" +
+            "Everything in raw/lib/arm64-v8a/ plus the binary manifest(s) are here.\n" +
+            "No smali/Java — this is the RE file set only.\n"
     }
 
     /** Honest, per-engine note on what the native layer is and how to actually read it. */
