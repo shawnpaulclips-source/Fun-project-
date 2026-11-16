@@ -38,11 +38,13 @@ python workbench.py run -p brawl      # or match by name
 grabs the foreground app. No typing the package name. Without `--auto` it matches `-p`
 or shows a numbered list.
 
-`run` asks for the folder to save into (folder picker, or a prompt if no window is
-available). Pass `-o <folder>` to skip the question. Pass `--force` to redo every stage.
-Pass `--native` to also export readable native pseudocode with Ghidra (slow; needs
-`ghidra_home` set). Stages are cached under `work/<package>/.stamps`, so a rerun skips
-finished work.
+When it finishes it drops the zip parts into a dedicated folder it creates under your
+Downloads: `Downloads/apk-workbench/<package>/`. Pass `-o <folder>` to send them
+somewhere else. Pass `--force` to redo every stage. Pass `--native` to also export
+readable native pseudocode with Ghidra (slow; needs `ghidra_home` set). Stages are
+cached under `work/<package>/.stamps`, so a rerun skips finished work.
+
+That folder, with every `*_part*.zip` in it, is what you hand back to add features to.
 
 ## Edit and rebuild (the part that round-trips)
 

@@ -633,21 +633,34 @@ def check_tools(cfg: dict) -> tuple[list[str], list[str]]:
     return missing, optional
 
 
-def ask_output_dir(given: str | None) -> Path:
+def downloads_dir() -> Path:
+    """The OS Downloads folder. Honours Windows' XDG-style user-shell-folder if it's
+    been moved, otherwise ~/Downloads, falling back to the home directory."""
+    home = Path.home()
+    if os.name == "nt":
+        try:
+            import winreg
+            key = r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders"
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key) as k:
+                val = winreg.QueryValueEx(k, "{374DE290-123F-4565-9164-39C4925E467B}")[0]
+                p = Path(os.path.expandvars(val))
+                if p.is_dir():
+                    return p
+        except Exception:
+            pass
+    d = home / "Downloads"
+    return d if d.is_dir() else home
+
+
+def resolve_output_dir(given: str | None, pkg: str) -> Path:
+    """Where the zip parts go. An explicit -o wins. Otherwise a dedicated folder
+    under Downloads, created if needed, named after the package."""
     if given:
-        return Path(given)
-    try:
-        import tkinter as tk
-        from tkinter import filedialog
-        root = tk.Tk()
-        root.withdraw()
-        chosen = filedialog.askdirectory(title="Save the zip parts to")
-        root.destroy()
-        if chosen:
-            return Path(chosen)
-    except Exception:
-        pass
-    return Path(input("folder to save the zip parts into: ").strip().strip('"'))
+        dest = Path(given)
+    else:
+        dest = downloads_dir() / "apk-workbench" / pkg.replace(".", "_")
+    dest.mkdir(parents=True, exist_ok=True)
+    return dest
 
 
 def run_pipeline(args: argparse.Namespace) -> None:
@@ -748,7 +761,7 @@ def run_pipeline(args: argparse.Namespace) -> None:
         print(f"  round trip ok: {vr['round_trip_ok']}")
         st.mark("verify")
 
-    dest = ask_output_dir(args.out)
+    dest = resolve_output_dir(args.out, pkg)
     name = pkg.replace(".", "_")
     print(f"pack: {name} -> {dest}")
     meta = {"package": pkg, "apk_sha256": sha256(merged)}
