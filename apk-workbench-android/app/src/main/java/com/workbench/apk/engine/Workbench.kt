@@ -106,7 +106,19 @@ class Workbench(private val context: Context) {
                 val n = EngineBridge.harvestNative(srcApks, raw)
                 val m = EngineBridge.harvestManifest(srcApks, raw)
                 say("RE files: $n native/metadata + $m manifest(s)")
-                File(out, "RE_FILES.txt").writeText(reFilesNote(pkg, engine))
+                val flutter = if (engine == "flutter") FlutterInfo.inspect(File(raw, "lib/arm64-v8a")) else null
+                flutter?.let { r ->
+                    say("flutter: Dart ${r.dartVersion ?: "unknown"}, snapshot ${r.snapshotBuildId ?: "unknown"}")
+                    r.notes.forEach { say("note: $it") }
+                }
+                File(out, "RE_FILES.txt").writeText(
+                    reFilesNote(pkg, engine) + (flutter?.let { r ->
+                        "\nFLUTTER FACTS (for blutter):\n" +
+                            "  Dart/Flutter SDK: ${r.dartVersion ?: "unknown"}\n" +
+                            "  Snapshot build id: ${r.snapshotBuildId ?: "unknown"}\n" +
+                            r.notes.joinToString("") { "  note: $it\n" }
+                    } ?: "")
+                )
                 set(Stage.RESOURCES, StageStatus.DONE, "$n files"); emit(snapshot(engine = engine))
 
                 set(Stage.PACK, StageStatus.RUNNING); emit(snapshot(engine = engine))
