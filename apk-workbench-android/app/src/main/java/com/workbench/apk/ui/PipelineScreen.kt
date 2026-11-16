@@ -1,10 +1,16 @@
 package com.workbench.apk.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.scaleIn
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,15 +49,24 @@ import com.workbench.apk.engine.StageStatus
 @Composable
 fun PipelineScreen(label: String, progress: Progress?) {
     val stages = progress?.stages ?: Stage.values().map { StageState(it) }
+    val overall = remember(stages) {
+        val done = stages.count { it.status == StageStatus.DONE }
+        val active = stages.firstOrNull { it.status == StageStatus.RUNNING }?.progress ?: 0f
+        ((done + active) / stages.size).coerceIn(0f, 1f)
+    }
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         Spacer(Modifier.height(20.dp))
-        Text(label, style = MaterialTheme.typography.titleLarge, color = TextHigh)
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("decompiling", style = MaterialTheme.typography.bodySmall, color = TextMid)
-            progress?.engine?.takeIf { it.isNotBlank() }?.let {
-                Spacer(Modifier.width(8.dp))
-                EnginePill(it)
+            Column(Modifier.weight(1f)) {
+                Text(label, style = MaterialTheme.typography.titleLarge, color = TextHigh)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    PulsingLabel("decompiling")
+                    progress?.engine?.takeIf { it.isNotBlank() }?.let {
+                        Spacer(Modifier.width(8.dp)); EnginePill(it)
+                    }
+                }
             }
+            ProgressDial(overall)
         }
         Spacer(Modifier.height(20.dp))
 
@@ -114,16 +129,20 @@ private fun StageRow(s: StageState, isLast: Boolean) {
                     Text(s.detail, color = TextMid, style = MaterialTheme.typography.labelMedium)
                 }
             }
-            if (s.status == StageStatus.RUNNING && s.progress > 0f) {
+            if (s.status == StageStatus.RUNNING) {
                 Spacer(Modifier.height(6.dp))
-                val p by animateFloatAsState(s.progress, tween(200), label = "p")
-                Box(
-                    Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp))
-                        .drawBehind {
-                            drawRect(Hairline)
-                            drawRect(Amber, size = size.copy(width = size.width * p))
-                        }
-                )
+                if (s.progress > 0f) {
+                    val p by animateFloatAsState(s.progress, tween(200), label = "p")
+                    Box(
+                        Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp))
+                            .drawBehind {
+                                drawRect(Hairline)
+                                drawRect(Amber, size = size.copy(width = size.width * p))
+                            }
+                    )
+                } else {
+                    IndeterminateBar()
+                }
             }
         }
     }
@@ -137,6 +156,47 @@ private fun StatusGlyph(icon: androidx.compose.ui.graphics.vector.ImageVector, t
             contentAlignment = Alignment.Center,
         ) { Icon(icon, null, tint = tint, modifier = Modifier.size(16.dp)) }
     }
+}
+
+@Composable
+private fun ProgressDial(fraction: Float) {
+    val f by animateFloatAsState(fraction, tween(300), label = "dial")
+    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(52.dp)) {
+        Box(
+            Modifier.size(52.dp).drawBehind {
+                val sw = 4.dp.toPx()
+                drawArc(Hairline, 0f, 360f, false, style = androidx.compose.ui.graphics.drawscope.Stroke(sw))
+                drawArc(Amber, -90f, 360f * f, false, style = androidx.compose.ui.graphics.drawscope.Stroke(sw))
+            }
+        )
+        Text("${(f * 100).toInt()}%", color = TextHigh, style = MaterialTheme.typography.labelMedium)
+    }
+}
+
+@Composable
+private fun PulsingLabel(text: String) {
+    val t = rememberInfiniteTransition(label = "pulse")
+    val a by t.animateFloat(0.45f, 1f, infiniteRepeatable(tween(900, easing = LinearEasing), RepeatMode.Reverse), label = "a")
+    val dots by t.animateFloat(0f, 3.99f, infiniteRepeatable(tween(1200, easing = LinearEasing), RepeatMode.Restart), label = "dots")
+    Text(
+        text + ".".repeat(dots.toInt()),
+        color = Amber.copy(alpha = a),
+        style = MaterialTheme.typography.bodySmall,
+    )
+}
+
+@Composable
+private fun IndeterminateBar() {
+    val t = rememberInfiniteTransition(label = "indet")
+    val x by t.animateFloat(-0.4f, 1f, infiniteRepeatable(tween(1100, easing = LinearEasing), RepeatMode.Restart), label = "x")
+    Box(
+        Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)).drawBehind {
+            drawRect(Hairline)
+            val w = size.width * 0.4f
+            val start = (x * size.width).coerceIn(-w, size.width)
+            drawRect(Amber, topLeft = Offset(start, 0f), size = size.copy(width = w))
+        }
+    )
 }
 
 @Composable

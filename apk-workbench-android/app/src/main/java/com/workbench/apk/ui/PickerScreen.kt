@@ -57,6 +57,8 @@ import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import com.workbench.apk.engine.AppScanner
 import com.workbench.apk.engine.InstalledApp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 fun PickerScreen(
@@ -74,7 +76,7 @@ fun PickerScreen(
     var loading by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
-        apps = runCatching { AppScanner.scan(context) }.getOrDefault(emptyList())
+        apps = withContext(Dispatchers.IO) { runCatching { AppScanner.scan(context) }.getOrDefault(emptyList()) }
         loading = false
     }
 

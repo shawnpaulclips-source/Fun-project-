@@ -31,7 +31,9 @@ import com.workbench.apk.ui.DoneScreen
 import com.workbench.apk.ui.PickerScreen
 import com.workbench.apk.ui.PipelineScreen
 import com.workbench.apk.ui.WorkbenchTheme
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 
 private sealed interface UiState {
@@ -93,6 +95,7 @@ private fun Root() {
                     val dest = treeUri
                     scope.launch {
                         Workbench(context).run(app.packageName, oneZip, dest)
+                            .flowOn(Dispatchers.IO)   // heavy pull/decompile off the UI thread
                             .catch { /* surfaced in the stage list as FAILED */ }
                             .collect { p ->
                                 state = if (p.finished)
