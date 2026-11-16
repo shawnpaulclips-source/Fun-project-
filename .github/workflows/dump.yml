@@ -1,15 +1,14 @@
 name: RE Dump (blutter + Ghidra)
 
-# Runs the heavy reverse-engineering toolchain in CI, where there's a full compiler
-# stack and open network — the things a phone and the sandbox don't have.
+# Heavy reverse-engineering in CI, driven entirely from a phone:
+#   1. Workbench app (RE mode, single-zip) -> one zip in Downloads.
+#   2. On github.com in the phone browser: Releases -> Draft new release ->
+#      attach that zip -> Publish.
+#   3. This workflow runs on the published release, dumps the libs, and uploads
+#      the finished dump back onto the SAME release as dump-result.zip.
+#   4. Download dump-result.zip from the release on the phone. No PC anywhere.
 #
-# Input: a release tag whose assets include one zip holding lib/arm64-v8a/*.so
-# (libapp.so + libflutter.so for blutter; the game engine .so for Ghidra).
-# Output: an artifact with the blutter dump, the Ghidra pseudocode, and logs.
-#
-# Note: whoever creates that release puts the app's native libraries on it. On a
-# public repo those become public. Keep the repo private for this, or delete the
-# release after the dump.
+# The push path (committed dump-input/) is for testing from here.
 
 on:
   push:
@@ -17,12 +16,12 @@ on:
     paths:
       - "dump-input/**"
       - ".github/workflows/dump.yml"
+  release:
+    types: [published]
   workflow_dispatch:
-    inputs:
-      engine_lib:
-        description: "Stripped engine .so for Ghidra (in dump-input/lib/arm64-v8a)"
-        required: false
-        default: "libsupercell_brawlstars.so"
+
+permissions:
+  contents: write
 
 env:
   ENGINE_LIB: libsupercell_brawlstars.so
@@ -36,14 +35,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Locate the native libs
+      - name: Locate the native libs (release upload, or committed dump-input)
         run: |
-          mkdir -p out
-          LIBDIR=$(dirname "$(find dump-input -name libapp.so | head -1)")
-          if [ -z "$LIBDIR" ]; then echo "no libapp.so under dump-input/"; exit 1; fi
+          mkdir -p out in
+          if [ "${{ github.event_name }}" = "release" ]; then
+            gh release download "${{ github.event.release.tag_name }}" -R "${{ github.repository }}" -D in || true
+            for z in in/*.zip; do [ -f "$z" ] && unzip -o "$z" -d in/ex >/dev/null || true; done
+          fi
+          LIBDIR=$(dirname "$(find in dump-input -name libapp.so 2>/dev/null | head -1)")
+          if [ -z "$LIBDIR" ]; then
+            echo "no libapp.so found (attach the Workbench RE zip to the release, or commit dump-input/)"; exit 1
+          fi
           echo "LIBDIR=$LIBDIR" >> "$GITHUB_ENV"
-          echo "found lib dir: $LIBDIR"
-          ls -la "$LIBDIR"
+          echo "lib dir: $LIBDIR"; ls -la "$LIBDIR"
 
       - name: Install blutter dependencies
         run: |
@@ -51,61 +55,81 @@ jobs:
           sudo apt-get install -y python3-pyelftools python3-requests git cmake ninja-build \
             build-essential pkg-config libicu-dev libcapstone-dev
 
-      - name: Run blutter on the Flutter lib (best effort)
+      - name: blutter on the Flutter lib (best effort)
         continue-on-error: true
         run: |
           git clone --depth 1 https://github.com/worawit/blutter.git
-          echo "=== Dart version in the app ==="
           strings "$LIBDIR/libflutter.so" | grep -E '[0-9]+\.[0-9]+\.[0-9]+ \((stable|beta)\)' | head -1 || true
-          # blutter fetches + builds the matching Dart runtime, then dumps libapp.so.
-          python3 blutter/blutter.py "$LIBDIR" out/blutter 2>&1 | tee out/blutter.log || echo "blutter did not complete; see out/blutter.log"
+          python3 blutter/blutter.py "$LIBDIR" out/blutter 2>&1 | tee out/blutter.log || echo "blutter did not complete (see log)"
 
       - name: Set up Ghidra
         continue-on-error: true
         run: |
-          GHIDRA_VER=11.1.2
-          GHIDRA_REL=20240709
+          V=11.1.2; B=20240709
           curl -sSL -o ghidra.zip \
-            "https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_${GHIDRA_VER}_build/ghidra_${GHIDRA_VER}_PUBLIC_${GHIDRA_REL}.zip"
+            "https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_${V}_build/ghidra_${V}_PUBLIC_${B}.zip"
           unzip -q ghidra.zip
-          echo "GHIDRA_HOME=$(pwd)/ghidra_${GHIDRA_VER}_PUBLIC" >> "$GITHUB_ENV"
+          echo "GHIDRA_HOME=$(pwd)/ghidra_${V}_PUBLIC" >> "$GITHUB_ENV"
 
-      - name: Ghidra headless pseudocode export of the engine (best effort)
+      - name: Ghidra full analysis + pseudocode export of the engine (best effort)
         continue-on-error: true
         run: |
-          ENGINE="$LIBDIR/${{ inputs.engine_lib || env.ENGINE_LIB }}"
-          if [ ! -f "$ENGINE" ]; then echo "engine lib not found: $ENGINE"; exit 0; fi
-          mkdir -p out ghidra_proj scripts
+          ENGINE="$LIBDIR/${{ env.ENGINE_LIB }}"
+          [ -f "$ENGINE" ] || { echo "engine lib $ENGINE not present, skipping"; exit 0; }
+          mkdir -p ghidra_proj scripts
           cat > scripts/ExportC.py <<'PY'
-          # Dump decompiled C for every function to $GHIDRA_OUT/engine.c
+          # Discover functions aggressively, then dump decompiled C for all of them.
           import os
           from ghidra.app.decompiler import DecompInterface
           from ghidra.util.task import ConsoleTaskMonitor
+          from ghidra.app.cmd.function import CreateFunctionCmd
+          mon = ConsoleTaskMonitor()
+          fm = currentProgram.getFunctionManager()
           ifc = DecompInterface(); ifc.openProgram(currentProgram)
           out = os.path.join(os.environ['GHIDRA_OUT'], 'engine.c')
-          mon = ConsoleTaskMonitor()
           n = 0
           with open(out, 'w') as f:
-              for fn in currentProgram.getFunctionManager().getFunctions(True):
-                  r = ifc.decompileFunction(fn, 45, mon)
+              for fn in fm.getFunctions(True):
+                  r = ifc.decompileFunction(fn, 60, mon)
                   if r and r.getDecompiledFunction():
+                      f.write('// ' + fn.getName() + ' @ ' + str(fn.getEntryPoint()) + '\n')
                       f.write(r.getDecompiledFunction().getC()); f.write('\n'); n += 1
           print('decompiled %d functions' % n)
+          # Also dump every readable string with its address, as RE anchors.
+          sm = currentProgram.getListing().getDefinedData(True)
+          with open(os.path.join(os.environ['GHIDRA_OUT'], 'engine_strings.txt'), 'w') as sf:
+              for d in sm:
+                  try:
+                      v = d.getValue()
+                      if isinstance(v, (str, unicode)) and len(v) >= 5:
+                          sf.write('%s  %s\n' % (d.getAddress(), v))
+                  except Exception:
+                      pass
           PY
+          # -analysisTimeoutPerFile lets the auto-analyzer run long enough to find functions
+          # in a 7MB stripped binary (the default run was cut short).
           GHIDRA_OUT="$(pwd)/out" "$GHIDRA_HOME/support/analyzeHeadless" "$(pwd)/ghidra_proj" dump \
             -import "$ENGINE" -scriptPath "$(pwd)/scripts" -postScript ExportC.py -deleteProject \
-            2>&1 | tee out/ghidra.log || echo "ghidra did not complete; see out/ghidra.log"
+            -analysisTimeoutPerFile 5400 2>&1 | tee out/ghidra.log || echo "ghidra did not complete (see log)"
 
       - name: Summarize
         if: always()
         run: |
           { echo "# RE dump summary"; echo
-            echo "## blutter"; ls -la out/blutter 2>/dev/null | head -40 || echo "no blutter output"
-            echo; echo "## ghidra"; ls -la out/engine.c 2>/dev/null || echo "no ghidra output"
+            echo "## blutter"; find out/blutter -maxdepth 1 2>/dev/null | head -40 || echo "no blutter output"
+            echo "dart files: $(find out/blutter/asm -name '*.dart' 2>/dev/null | wc -l)"
+            echo; echo "## ghidra"; ls -la out/engine.c out/engine_strings.txt 2>/dev/null || echo "no ghidra output"
           } > out/SUMMARY.md
           cat out/SUMMARY.md
 
-      - name: Upload the dump
+      - name: Publish the dump back onto the release (phone-downloadable)
+        if: ${{ always() && github.event_name == 'release' }}
+        run: |
+          cd out && zip -rq ../dump-result.zip . && cd ..
+          gh release upload "${{ github.event.release.tag_name }}" dump-result.zip --clobber -R "${{ github.repository }}"
+          echo "uploaded dump-result.zip to release ${{ github.event.release.tag_name }}"
+
+      - name: Upload artifact (always)
         if: always()
         uses: actions/upload-artifact@v4
         with:
