@@ -14,11 +14,8 @@ name: RE Dump (blutter + Ghidra)
 on:
   workflow_dispatch:
     inputs:
-      release_tag:
-        description: "Release tag holding the RE zip (asset name re.zip)"
-        required: true
       engine_lib:
-        description: "Stripped engine .so for Ghidra (in lib/arm64-v8a)"
+        description: "Stripped engine .so for Ghidra (in dump-input/lib/arm64-v8a)"
         required: false
         default: "libsupercell_brawlstars.so"
 
@@ -29,12 +26,13 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Fetch the RE zip from the release
+      - uses: actions/checkout@v4
+
+      - name: Locate the native libs
         run: |
-          mkdir -p in out
-          gh release download "${{ inputs.release_tag }}" -R "${{ github.repository }}" -p 're.zip' -D in
-          unzip -o in/re.zip -d in/extracted
-          LIBDIR=$(dirname "$(find in/extracted -name libapp.so | head -1)")
+          mkdir -p out
+          LIBDIR=$(dirname "$(find dump-input -name libapp.so | head -1)")
+          if [ -z "$LIBDIR" ]; then echo "no libapp.so under dump-input/"; exit 1; fi
           echo "LIBDIR=$LIBDIR" >> "$GITHUB_ENV"
           echo "found lib dir: $LIBDIR"
           ls -la "$LIBDIR"
