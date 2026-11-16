@@ -1,0 +1,12 @@
+{
+  "adb": "tools/platform-tools/adb",
+  "java": "java",
+  "apktool_jar": "tools/apktool.jar",
+  "jadx_bin": "tools/jadx/bin/jadx",
+  "apkeditor_jar": "tools/APKEditor.jar",
+  "il2cpp_dll": "tools/Il2CppDumper/Il2CppDumper.dll",
+  "dotnet": "dotnet",
+  "apksigner": "",
+  "keystore": "",
+  "key_alias": "workbench"
+}

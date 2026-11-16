@@ -1,0 +1,5 @@
+work/
+tools/
+workbench.json
+*.keystore
+__pycache__/
