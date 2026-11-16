@@ -28,10 +28,14 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -55,7 +59,15 @@ import com.workbench.apk.engine.AppScanner
 import com.workbench.apk.engine.InstalledApp
 
 @Composable
-fun PickerScreen(modifier: Modifier = Modifier, onPick: (InstalledApp) -> Unit) {
+fun PickerScreen(
+    modifier: Modifier = Modifier,
+    folderName: String? = null,
+    singleZip: Boolean = false,
+    onPickFolder: () -> Unit = {},
+    onUseDownloads: () -> Unit = {},
+    onToggleSingle: (Boolean) -> Unit = {},
+    onPick: (InstalledApp) -> Unit,
+) {
     val context = LocalContext.current
     var apps by remember { mutableStateOf<List<InstalledApp>>(emptyList()) }
     var query by remember { mutableStateOf("") }
@@ -76,6 +88,15 @@ fun PickerScreen(modifier: Modifier = Modifier, onPick: (InstalledApp) -> Unit) 
         Text("Workbench", style = androidx.compose.material3.MaterialTheme.typography.headlineMedium, color = TextHigh)
         Text("pick an app to decompile", style = androidx.compose.material3.MaterialTheme.typography.bodySmall, color = TextMid)
         Spacer(Modifier.height(16.dp))
+
+        SettingsCard(
+            folderName = folderName,
+            singleZip = singleZip,
+            onPickFolder = onPickFolder,
+            onUseDownloads = onUseDownloads,
+            onToggleSingle = onToggleSingle,
+        )
+        Spacer(Modifier.height(12.dp))
 
         OutlinedTextField(
             value = query,
@@ -149,6 +170,75 @@ private fun AppRow(app: InstalledApp, onClick: () -> Unit) {
                 style = androidx.compose.material3.MaterialTheme.typography.labelMedium)
             if (app.splitCount > 1) Text("${app.splitCount} splits", color = TextLow,
                 style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
+        }
+    }
+}
+
+@Composable
+private fun SettingsCard(
+    folderName: String?,
+    singleZip: Boolean,
+    onPickFolder: () -> Unit,
+    onUseDownloads: () -> Unit,
+    onToggleSingle: (Boolean) -> Unit,
+) {
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(GraphiteCard).padding(14.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.FolderOpen, null, tint = Amber, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Save to", color = TextMid, style = MaterialTheme.typography.labelSmall)
+                Text(
+                    folderName ?: "Downloads/apk-workbench",
+                    color = TextHigh,
+                    style = MaterialTheme.typography.labelMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Text(
+                "Change",
+                color = Teal,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable(onClick = onPickFolder)
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+            )
+        }
+        if (folderName != null) {
+            Text(
+                "Using a custom folder · tap to switch back to Downloads",
+                color = TextLow,
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.clickable(onClick = onUseDownloads).padding(top = 4.dp),
+            )
+        }
+
+        Spacer(Modifier.height(12.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("One big zip", color = TextHigh, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Medium)
+                Text(
+                    if (singleZip) "whole dump in one file — for keeping / USB, too big to re-upload"
+                    else "many parts under 30 MB — upload these back to add features",
+                    color = TextMid,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+            Spacer(Modifier.width(10.dp))
+            Switch(
+                checked = singleZip,
+                onCheckedChange = onToggleSingle,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Graphite,
+                    checkedTrackColor = Amber,
+                    uncheckedThumbColor = TextMid,
+                    uncheckedTrackColor = GraphiteRaised,
+                    uncheckedBorderColor = Hairline,
+                ),
+            )
         }
     }
 }

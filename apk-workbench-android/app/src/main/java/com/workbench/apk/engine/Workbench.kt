@@ -1,10 +1,6 @@
 package com.workbench.apk.engine
 
-import android.content.ContentValues
 import android.content.Context
-import android.os.Build
-import android.os.Environment
-import android.provider.MediaStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import org.json.JSONObject
@@ -58,7 +54,7 @@ class Workbench(private val context: Context) {
         "godot" to "libgodot_android.so",
     )
 
-    fun run(pkg: String): Flow<Progress> = flow {
+    fun run(pkg: String, singleZip: Boolean = false, treeUri: android.net.Uri? = null): Flow<Progress> = flow {
         val stages = Stage.values().map { StageState(it) }.toMutableList()
         val log = ArrayList<String>()
         fun snapshot(finished: Boolean = false, dir: String? = null, parts: List<String> = emptyList(), engine: String = "") =
@@ -125,17 +121,27 @@ class Workbench(private val context: Context) {
             writeEditMe(out, pkg, engine)
             set(Stage.RESOURCES, StageStatus.DONE); emit(snapshot(engine = engine))
 
-            // 7. PACK -> Downloads/apk-workbench/<pkg>/
+            // 7. PACK -> chosen folder, or Downloads/apk-workbench/<pkg>/
             set(Stage.PACK, StageStatus.RUNNING); emit(snapshot(engine = engine))
             val name = pkg.replace('.', '_')
-            val staging = File(work, "zips").apply { mkdirs() }
+            val staging = File(work, "zips").apply { deleteRecursively(); mkdirs() }
             val meta = JSONObject().apply { put("package", pkg); put("engine", engine); put("apk_sha256", Packer.sha256(merged)) }
-            val parts = Packer.pack(out, staging, name, meta) { p ->
-                set(Stage.PACK, StageStatus.RUNNING, "writing parts", p)
+            val parts = if (singleZip) {
+                Packer.packSingle(out, staging, name, meta) { p ->
+                    set(Stage.PACK, StageStatus.RUNNING, "writing one zip", p)
+                }
+            } else {
+                Packer.pack(out, staging, name, meta) { p ->
+                    set(Stage.PACK, StageStatus.RUNNING, "writing parts", p)
+                }
             }
-            val dirLabel = publishToDownloads(pkg, parts)
-            parts.forEach { say("part ${it.name}  ${"%.1f".format(it.length() / 1e6)} MB") }
-            set(Stage.PACK, StageStatus.DONE, "${parts.size} part(s)")
+            set(Stage.PACK, StageStatus.RUNNING, "saving", 0f); emit(snapshot(engine = engine))
+            val dirLabel = Output.publish(context, treeUri, pkg, parts) { p ->
+                set(Stage.PACK, StageStatus.RUNNING, "saving", p)
+            }
+            staging.deleteRecursively()
+            parts.forEach { say("${if (singleZip) "zip" else "part"} ${it.name}  ${"%.1f".format(it.length() / 1e6)} MB") }
+            set(Stage.PACK, StageStatus.DONE, if (singleZip) "one zip" else "${parts.size} part(s)")
             say("saved to $dirLabel")
             emit(snapshot(finished = true, dir = dirLabel, parts = parts.map { it.name }, engine = engine))
         } catch (e: Throwable) {
@@ -178,35 +184,4 @@ class Workbench(private val context: Context) {
         )
     }
 
-    /** Copy parts into the public Downloads/apk-workbench/<pkg>/ via MediaStore. */
-    private fun publishToDownloads(pkg: String, parts: List<File>): String {
-        val sub = "apk-workbench/${pkg.replace('.', '_')}"
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val resolver = context.contentResolver
-            for (p in parts) {
-                // Replace an existing part of the same name.
-                resolver.delete(
-                    MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-                    "${MediaStore.Downloads.RELATIVE_PATH}=? AND ${MediaStore.Downloads.DISPLAY_NAME}=?",
-                    arrayOf("${Environment.DIRECTORY_DOWNLOADS}/$sub/", p.name),
-                )
-                val values = ContentValues().apply {
-                    put(MediaStore.Downloads.DISPLAY_NAME, p.name)
-                    put(MediaStore.Downloads.MIME_TYPE, "application/zip")
-                    put(MediaStore.Downloads.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/$sub")
-                    put(MediaStore.Downloads.IS_PENDING, 1)
-                }
-                val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-                    ?: throw IllegalStateException("could not create ${p.name} in Downloads")
-                resolver.openOutputStream(uri).use { os -> p.inputStream().use { it.copyTo(os!!) } }
-                resolver.update(uri, ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }, null, null)
-            }
-            return "Downloads/$sub"
-        } else {
-            @Suppress("DEPRECATION")
-            val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), sub).apply { mkdirs() }
-            for (p in parts) p.copyTo(File(dir, p.name), overwrite = true)
-            return "Downloads/$sub"
-        }
-    }
 }

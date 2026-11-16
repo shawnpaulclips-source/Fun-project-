@@ -70,8 +70,11 @@ fun DoneScreen(label: String, progress: Progress, onBack: () -> Unit) {
             Text(progress.outputDir ?: "Downloads", color = Amber, fontWeight = FontWeight.Medium)
         }
         Spacer(Modifier.height(4.dp))
-        Text("${progress.parts.size} zip part(s), each under 30 MB — upload the folder to add features",
-            style = MaterialTheme.typography.bodySmall, color = TextMid)
+        Text(
+            if (progress.parts.size == 1) "one zip — whole dump in a single file"
+            else "${progress.parts.size} parts under 30 MB — upload the folder to add features",
+            style = MaterialTheme.typography.bodySmall, color = TextMid,
+        )
 
         Spacer(Modifier.height(16.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.weight(1f)) {

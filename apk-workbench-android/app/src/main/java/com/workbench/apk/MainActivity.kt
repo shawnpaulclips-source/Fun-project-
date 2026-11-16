@@ -1,9 +1,13 @@
 package com.workbench.apk
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.fadeIn
@@ -20,6 +24,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import com.workbench.apk.engine.Prefs
 import com.workbench.apk.engine.Progress
 import com.workbench.apk.engine.Workbench
 import com.workbench.apk.ui.DoneScreen
@@ -47,7 +52,25 @@ class MainActivity : ComponentActivity() {
 private fun Root() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val prefs = remember { Prefs(context) }
     var state by remember { mutableStateOf<UiState>(UiState.Picker) }
+    var singleZip by remember { mutableStateOf(prefs.singleZip) }
+    var treeUri by remember { mutableStateOf(prefs.treeUri) }
+    var folderName by remember { mutableStateOf(treeUri?.let { folderLabel(it) }) }
+
+    val pickFolder = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree(),
+    ) { uri ->
+        if (uri != null) {
+            // Keep write access across restarts.
+            context.contentResolver.takePersistableUriPermission(
+                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            )
+            prefs.treeUri = uri
+            treeUri = uri
+            folderName = folderLabel(uri)
+        }
+    }
 
     AnimatedContent(
         targetState = state,
@@ -59,10 +82,17 @@ private fun Root() {
         when (s) {
             is UiState.Picker -> PickerScreen(
                 modifier = Modifier.padding(),
+                folderName = folderName,
+                singleZip = singleZip,
+                onPickFolder = { pickFolder.launch(null) },
+                onUseDownloads = { prefs.treeUri = null; treeUri = null; folderName = null },
+                onToggleSingle = { singleZip = it; prefs.singleZip = it },
                 onPick = { app ->
                     state = UiState.Running(app.packageName, app.label, null)
+                    val oneZip = singleZip
+                    val dest = treeUri
                     scope.launch {
-                        Workbench(context).run(app.packageName)
+                        Workbench(context).run(app.packageName, oneZip, dest)
                             .catch { /* surfaced in the stage list as FAILED */ }
                             .collect { p ->
                                 state = if (p.finished)
@@ -81,4 +111,10 @@ private fun Root() {
             )
         }
     }
+}
+
+/** A readable folder name out of a tree Uri (the last path segment after the ':'). */
+private fun folderLabel(uri: Uri): String {
+    val last = uri.lastPathSegment ?: return "chosen folder"
+    return last.substringAfterLast(':').substringAfterLast('/').ifBlank { last }
 }

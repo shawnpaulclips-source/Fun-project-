@@ -171,6 +171,37 @@ object Packer {
         putNextEntry(ZipEntry(name)); write(bytes); closeEntry()
     }
 
+    /**
+     * The whole tree in one zip, no size cap. For keeping or USB transfer — too big to
+     * upload back through chat, which is what the split [pack] is for.
+     */
+    fun packSingle(
+        src: File,
+        dest: File,
+        name: String,
+        meta: JSONObject,
+        onProgress: (Float) -> Unit = {},
+    ): List<File> {
+        dest.mkdirs()
+        val target = File(dest, "$name.zip")
+        if (target.exists()) target.delete()
+        val all = src.walkTopDown().filter { it.isFile }.sortedBy { it.path }.toList()
+        ZipOutputStream(target.outputStream().buffered()).use { zos ->
+            zos.setLevel(6)
+            zos.putEntry(MANIFEST, JSONObject(meta.toString()).apply { put("name", name); put("single", true) }
+                .toString().toByteArray(Charsets.UTF_8))
+            all.forEachIndexed { i, f ->
+                val rel = f.relativeTo(src).path.replace(File.separatorChar, '/')
+                zos.putNextEntry(ZipEntry(rel))
+                f.inputStream().use { it.copyTo(zos, 1 shl 20) }
+                zos.closeEntry()
+                if (i % 32 == 0) onProgress((i + 1f) / all.size)
+            }
+        }
+        onProgress(1f)
+        return listOf(target)
+    }
+
     /** Reassemble parts into a tree and verify every chunked file's sha256. */
     fun unpack(partsDir: File, out: File) {
         val zips = partsDir.listFiles { f -> f.name.contains("_part") && f.name.endsWith(".zip") }
