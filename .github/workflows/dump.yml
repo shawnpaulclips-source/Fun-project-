@@ -1,0 +1,108 @@
+name: RE Dump (blutter + Ghidra)
+
+# Runs the heavy reverse-engineering toolchain in CI, where there's a full compiler
+# stack and open network — the things a phone and the sandbox don't have.
+#
+# Input: a release tag whose assets include one zip holding lib/arm64-v8a/*.so
+# (libapp.so + libflutter.so for blutter; the game engine .so for Ghidra).
+# Output: an artifact with the blutter dump, the Ghidra pseudocode, and logs.
+#
+# Note: whoever creates that release puts the app's native libraries on it. On a
+# public repo those become public. Keep the repo private for this, or delete the
+# release after the dump.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag holding the RE zip (asset name re.zip)"
+        required: true
+      engine_lib:
+        description: "Stripped engine .so for Ghidra (in lib/arm64-v8a)"
+        required: false
+        default: "libsupercell_brawlstars.so"
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Fetch the RE zip from the release
+        run: |
+          mkdir -p in out
+          gh release download "${{ inputs.release_tag }}" -R "${{ github.repository }}" -p 're.zip' -D in
+          unzip -o in/re.zip -d in/extracted
+          LIBDIR=$(dirname "$(find in/extracted -name libapp.so | head -1)")
+          echo "LIBDIR=$LIBDIR" >> "$GITHUB_ENV"
+          echo "found lib dir: $LIBDIR"
+          ls -la "$LIBDIR"
+
+      - name: Install blutter dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-pyelftools python3-requests git cmake ninja-build \
+            build-essential pkg-config libicu-dev libcapstone-dev
+
+      - name: Run blutter on the Flutter lib (best effort)
+        continue-on-error: true
+        run: |
+          git clone --depth 1 https://github.com/worawit/blutter.git
+          echo "=== Dart version in the app ==="
+          strings "$LIBDIR/libflutter.so" | grep -E '[0-9]+\.[0-9]+\.[0-9]+ \((stable|beta)\)' | head -1 || true
+          # blutter fetches + builds the matching Dart runtime, then dumps libapp.so.
+          python3 blutter/blutter.py "$LIBDIR" out/blutter 2>&1 | tee out/blutter.log || echo "blutter did not complete; see out/blutter.log"
+
+      - name: Set up Ghidra
+        continue-on-error: true
+        run: |
+          GHIDRA_VER=11.1.2
+          GHIDRA_REL=20240709
+          curl -sSL -o ghidra.zip \
+            "https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_${GHIDRA_VER}_build/ghidra_${GHIDRA_VER}_PUBLIC_${GHIDRA_REL}.zip"
+          unzip -q ghidra.zip
+          echo "GHIDRA_HOME=$(pwd)/ghidra_${GHIDRA_VER}_PUBLIC" >> "$GITHUB_ENV"
+
+      - name: Ghidra headless pseudocode export of the engine (best effort)
+        continue-on-error: true
+        run: |
+          ENGINE="$LIBDIR/${{ inputs.engine_lib }}"
+          if [ ! -f "$ENGINE" ]; then echo "engine lib not found: $ENGINE"; exit 0; fi
+          mkdir -p out ghidra_proj scripts
+          cat > scripts/ExportC.py <<'PY'
+          # Dump decompiled C for every function to $GHIDRA_OUT/engine.c
+          import os
+          from ghidra.app.decompiler import DecompInterface
+          from ghidra.util.task import ConsoleTaskMonitor
+          ifc = DecompInterface(); ifc.openProgram(currentProgram)
+          out = os.path.join(os.environ['GHIDRA_OUT'], 'engine.c')
+          mon = ConsoleTaskMonitor()
+          n = 0
+          with open(out, 'w') as f:
+              for fn in currentProgram.getFunctionManager().getFunctions(True):
+                  r = ifc.decompileFunction(fn, 45, mon)
+                  if r and r.getDecompiledFunction():
+                      f.write(r.getDecompiledFunction().getC()); f.write('\n'); n += 1
+          print('decompiled %d functions' % n)
+          PY
+          GHIDRA_OUT="$(pwd)/out" "$GHIDRA_HOME/support/analyzeHeadless" "$(pwd)/ghidra_proj" dump \
+            -import "$ENGINE" -scriptPath "$(pwd)/scripts" -postScript ExportC.py -deleteProject \
+            2>&1 | tee out/ghidra.log || echo "ghidra did not complete; see out/ghidra.log"
+
+      - name: Summarize
+        if: always()
+        run: |
+          { echo "# RE dump summary"; echo
+            echo "## blutter"; ls -la out/blutter 2>/dev/null | head -40 || echo "no blutter output"
+            echo; echo "## ghidra"; ls -la out/engine.c 2>/dev/null || echo "no ghidra output"
+          } > out/SUMMARY.md
+          cat out/SUMMARY.md
+
+      - name: Upload the dump
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: re-dump
+          path: out
+          if-no-files-found: warn
