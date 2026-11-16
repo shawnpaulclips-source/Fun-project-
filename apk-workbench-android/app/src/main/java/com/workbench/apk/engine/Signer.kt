@@ -22,10 +22,11 @@ class Signer private constructor(
 ) {
     fun sign(input: File, output: File) {
         val config = ApkSigner.SignerConfig.Builder("workbench", privateKey, certs).build()
+        // apksig 2.3.0: v3 is applied automatically from the signer config; only v1/v2
+        // are toggled here. v2 is sufficient to install on modern Android.
         ApkSigner.Builder(listOf(config))
             .setV1SigningEnabled(true)
             .setV2SigningEnabled(true)
-            .setV3SigningEnabled(true)
             .setInputApk(input)
             .setOutputApk(output)
             .build()
